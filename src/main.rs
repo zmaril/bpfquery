@@ -1,17 +1,20 @@
 mod bpftrace_compiler;
 mod parser;
-mod ssh;
+use openssh::{KnownHosts, Session, Stdio};
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
-use std::io::prelude::*;
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 
-fn main() -> Result<()> {
-    // get first argument of the program and use that as hostname 
+#[tokio::main]
+async fn main() -> Result<()> {
+    // get first argument of the program and use that as hostname
     let args: Vec<String> = std::env::args().collect();
     let hostname = &args[1];
 
     let sql = "select pid, cpu, elapsed from kprobe.do_nanosleep;";
-    let sess = ssh::get_session(hostname.to_string());
+    let session = Session::connect(hostname, KnownHosts::Strict)
+        .await
+        .unwrap();
 
     // make a repl for the user to input sql queries and have them be compiled into bpftrace
     // and then run on the target machine
@@ -26,7 +29,7 @@ fn main() -> Result<()> {
                 match line.as_str() {
                     "exit" => break,
                     "go" => sql,
-                    _ => &line.clone() 
+                    _ => &line.clone(),
                 }
             }
             Err(ReadlineError::Interrupted) => {
@@ -48,14 +51,26 @@ fn main() -> Result<()> {
         let mut bpftrace_command = format!("bpftrace -e '{}'", bpftrace_output);
         println!("{}", bpftrace_command);
 
-        // send the bpftrace output to the target machine
-        let mut channel = sess.channel_session().unwrap();
-        channel.exec(&bpftrace_command).unwrap();
-        let mut s = String::new();
-        channel.read_to_string(&mut s).unwrap();
-        dbg!(s);
-        channel.wait_close().unwrap();
-        dbg!(channel.exit_status().unwrap());
+        let mut remote_cmd = session.command("bpftrace");
+        remote_cmd.arg("-e");
+        remote_cmd.arg(bpftrace_output);
+        remote_cmd.stdout(Stdio::piped());
+        
+        let mut handle = remote_cmd.spawn().await.unwrap();
+        let stdout = handle.stdout().as_mut().unwrap();
+
+        let stdout_reader = BufReader::new(stdout);
+
+        let mut lines = stdout_reader.lines();
+        while let Some(line) = lines.next_line().await.unwrap() {
+            println!("{}", line);
+        }
+
+        
+
+
+
+
     }
     Ok(())
 }

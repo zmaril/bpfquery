@@ -53,7 +53,7 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> String {
     let mut printf = String::new();
     printf.push_str("printf(\"");
     for e in outputs.clone() {
-        printf.push_str(& format!("{} %d", e));
+        printf.push_str(& format!("{} %d ", e));
     }
     printf.push_str("\\n\", ");
     for e in outputs {
