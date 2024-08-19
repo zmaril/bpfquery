@@ -38,5 +38,7 @@ The main focus right now is expanding the SQL to BPF compiler to handle more SQL
 * [ ] Write some tests
 * [ ] Get CI going
 * [ ] Put up some releases 
-* [ ] Make the CLI better 
 * [ ] add in background like beehive and yql 
+* [ ] Make it not hang 
+* [ ] Write some docs
+* [ ] Make the table scrollable 

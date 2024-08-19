@@ -1,4 +1,3 @@
-use openssh::Session;
 use ratatui::prelude::*;
 use ratatui::{
     backend::CrosstermBackend,
@@ -18,19 +17,14 @@ use ratatui::{
     },
     Frame, Terminal,
 };
-use std::result;
-use std::sync::{Arc, Mutex};
-use std::{
-    collections::HashMap,
-    io::{self, stdout, Stdout},
-};
+use std::io::{self, stdout, Stdout};
+use tokio::sync::watch;
+use tokio::task;
 use tui_textarea::TextArea;
 
 use crate::bpftrace_compiler::compile_ast_to_bpftrace;
 use crate::executor::execute_sql;
 use crate::parser::parse_bpfquery_sql;
-use tokio::sync::watch;
-use tokio::task;
 
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
 
@@ -57,21 +51,16 @@ pub struct App {
     pub bpfoutput: String,
     pub headers: Vec<String>,
     pub results: Vec<Vec<String>>,
+    pub results_sender: watch::Sender<Vec<Vec<String>>>,
+    pub task: task::JoinHandle<()>,
 }
 
 impl App {
     pub async fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
-        self.update_sql();
         let (results_sender, results_reciever) = watch::channel(self.results.clone());
+        self.results_sender = results_sender;
 
-        let h = self.hostname.clone();
-        let he = self.headers.clone();
-        let b = self.bpfoutput.clone();
-
-        task::spawn(async {
-            println!("executing sql");
-            execute_sql(h, he, b, results_sender).await;
-        });
+        self.update_sql();
 
         loop {
             if self.exit {
@@ -84,7 +73,6 @@ impl App {
             if self.results != *data {
                 self.results = data.clone();
             }
-
         }
         Ok(())
     }
@@ -120,9 +108,24 @@ impl App {
         let s = self.textarea.lines().join("\n");
         let ast_result = parse_bpfquery_sql(&s);
         if let Ok(ast) = ast_result {
-            let (bpfoutput, headers) = compile_ast_to_bpftrace(ast);
-            self.bpfoutput = bpfoutput;
-            self.headers = headers;
+            if let Ok((bpfoutput, headers)) = compile_ast_to_bpftrace(ast) {
+                if bpfoutput != self.bpfoutput {
+                    self.bpfoutput = bpfoutput;
+                    self.headers = headers;
+
+                    let h = self.hostname.clone();
+                    let he = self.headers.clone();
+                    let b = self.bpfoutput.clone();
+                    let results_sender = self.results_sender.clone();
+
+                    self.task.abort();
+                    results_sender.send(vec![]).unwrap();
+
+                    self.task = task::spawn(async {
+                        execute_sql(h, he, b, results_sender).await;
+                    });
+                }
+            }
         } else {
             self.bpfoutput = "Error parsing sql\n".to_string();
             self.bpfoutput
@@ -132,6 +135,7 @@ impl App {
 
     fn exit(&mut self) {
         self.exit = true;
+        self.task.abort();
     }
 }
 
@@ -165,6 +169,7 @@ impl Widget for &App {
                 Constraint::Percentage(33),
                 Constraint::Percentage(33),
             ])
+            .spacing(1)
             .split(block.inner(area));
 
         let left = layout[0];
@@ -184,30 +189,40 @@ impl Widget for &App {
         bpfoutput.render(middle, buf);
 
         // Make the table on the right
+        if self.results.len() == 1 && self.results[0].len() == 1 {
+            //Display a paragraph with the error
+            let error = Paragraph::new(Text::from(self.results[0][0].clone()))
+                .alignment(Alignment::Left)
+                .wrap(ratatui::widgets::Wrap { trim: true });
+            error.render(right, buf);
+        } else {
+            // Put the headers in there
+            let mut headers = ["id".to_string()].to_vec();
+            for header in self.headers.clone() {
+                headers.push(header);
+            }
+            let heading = Row::new(headers.clone());
 
-        // Put the headers in there
-        let heading = Row::new(self.headers.clone());
+            let widths = headers
+                .iter()
+                .map(|_| Constraint::Percentage(100 / headers.len() as u16))
+                .collect::<Vec<_>>();
 
-        let widths = self
-            .headers
-            .iter()
-            .map(|_| Constraint::Percentage(100 / self.headers.len() as u16))
-            .collect::<Vec<_>>();
+            // convert the results into rows
+            let mut rows = Vec::new();
+            for result in self.results.clone() {
+                rows.push(Row::new(result));
+            }
 
-        // convert the results into rows
-        let mut rows = Vec::new();
-        for result in self.results.clone() {
-            rows.push(Row::new(result));
+            let table = Table::new(rows, widths)
+                // ...and   they can be separated by a fixed spacing.
+                .column_spacing(1)
+                // It has an optional header, which is simply a Row always visible at the top.
+                .header(heading)
+                // As any other widget, a Table can be wrapped in a Block.
+                .block(Block::new().title("bpftrace results"));
+
+            ratatui::prelude::Widget::render(&table, right, buf);
         }
-
-        let table = Table::new(rows, widths)
-            // ...and   they can be separated by a fixed spacing.
-            .column_spacing(1)
-            // It has an optional header, which is simply a Row always visible at the top.
-            .header(heading)
-            // As any other widget, a Table can be wrapped in a Block.
-            .block(Block::new().title("bpftrace results"));
-
-        ratatui::prelude::Widget::render(&table, right, buf);
     }
 }

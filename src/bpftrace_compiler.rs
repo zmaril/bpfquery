@@ -1,6 +1,8 @@
 use sqlparser::ast::*;
+use std::io::Result;
 
-pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> (String, Vec<String>) {
+
+pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<String>)> {
     let q = match &ast[0] {
         Statement::Query(q) => q,
         _ => panic!("Expected a query"),
@@ -34,7 +36,7 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> (String, Vec<String>) {
 
     //convert from into bpftrace probe 
     bpftrace.push_str(&probe_name); 
-    bpftrace.push_str(" {");
+    bpftrace.push_str("\n {\n");
 
     // print out the projections
 
@@ -53,10 +55,10 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> (String, Vec<String>) {
     let mut results_update = String::new();
 
 
-    results_update.push_str("@q1_id[\"id\"] = count();\n");
+    results_update.push_str("\t@q1_id[\"id\"] = count();\n");
 
     for e in outputs.clone() {
-        results_update.push_str(&format!("$q1_{} = {};\n", e, e));
+        results_update.push_str(&format!("\t$q1_{} = {};\n", e, e));
     }
 
     //    print((("pid",$q1_pid), ("cpu", $q1_cpu ), ("elapsed", $q1_elapsed), ("id",@q1_id["id"]) ));
@@ -64,16 +66,18 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> (String, Vec<String>) {
     bpftrace.push_str(&results_update);
 
     let mut print_str = String::new();
-    print_str.push_str("print((");
+
+    print_str.push_str("\tprint((");
+    print_str.push_str("(\"id\",@q1_id[\"id\"]),");
     for e in outputs.clone() {
         print_str.push_str(&format!("(\"{}\",$q1_{}),", e, e));
     }
-    print_str.push_str("(\"id\",@q1_id[\"id\"])");
-    print_str.push_str("));");
+    print_str.pop();
+    print_str.push_str("));\n");
 
     bpftrace.push_str(&print_str);
 
     bpftrace.push_str(" }");
 
-    (bpftrace, outputs)
+    Ok((bpftrace, outputs))
 }
