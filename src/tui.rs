@@ -1,7 +1,5 @@
 use openssh::Session;
 use ratatui::prelude::*;
-use std::{collections::HashMap, io::{self, stdout, Stdout}};
-use tui_textarea::TextArea;
 use ratatui::{
     backend::CrosstermBackend,
     buffer::Buffer,
@@ -20,9 +18,19 @@ use ratatui::{
     },
     Frame, Terminal,
 };
+use std::result;
+use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    io::{self, stdout, Stdout},
+};
+use tui_textarea::TextArea;
 
 use crate::bpftrace_compiler::compile_ast_to_bpftrace;
+use crate::executor::execute_sql;
 use crate::parser::parse_bpfquery_sql;
+use tokio::sync::watch;
+use tokio::task;
 
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
 
@@ -44,19 +52,39 @@ pub fn restore() -> io::Result<()> {
 pub struct App {
     pub exit: bool,
     pub counter: u32,
-    pub session: Session,
     pub hostname: String,
     pub textarea: TextArea<'static>,
     pub bpfoutput: String,
     pub headers: Vec<String>,
-    pub results: Vec<HashMap<String,String>>
+    pub results: Vec<Vec<String>>,
 }
 
 impl App {
-    pub fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
-        while !self.exit {
+    pub async fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
+        self.update_sql();
+        let (results_sender, results_reciever) = watch::channel(self.results.clone());
+
+        let h = self.hostname.clone();
+        let he = self.headers.clone();
+        let b = self.bpfoutput.clone();
+
+        task::spawn(async {
+            println!("executing sql");
+            execute_sql(h, he, b, results_sender).await;
+        });
+
+        loop {
+            if self.exit {
+                break;
+            }
             terminal.draw(|frame| self.render_frame(frame))?;
+            // select! for results recievere and for handling events
             self.handle_events()?;
+            let data = results_reciever.borrow().clone();
+            if self.results != *data {
+                self.results = data.clone();
+            }
+
         }
         Ok(())
     }
@@ -66,14 +94,16 @@ impl App {
     }
 
     fn handle_events(&mut self) -> io::Result<()> {
-        match event::read()? {
-            // it's important to check that the event is a key press event as
-            // crossterm also emits key release and repeat events on Windows.
-            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)
-            }
-            _ => {}
-        };
+        if event::poll(std::time::Duration::from_millis(100))? {
+            match event::read()? {
+                // it's important to check that the event is a key press event as
+                // crossterm also emits key release and repeat events on Windows.
+                Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                    self.handle_key_event(key_event)
+                }
+                _ => {}
+            };
+        }
         Ok(())
     }
 
@@ -82,17 +112,21 @@ impl App {
             self.exit();
         } else {
             self.textarea.input(key_event);
-            let s = self.textarea.lines().join("\n");
-            let ast_result = parse_bpfquery_sql(&s); 
-            if let Ok(ast) = ast_result {
-                let (bpfoutput, headers) = compile_ast_to_bpftrace(ast);
-                self.bpfoutput = bpfoutput;
-                self.headers = headers;
-            }
-            else {
-                self.bpfoutput = "Error parsing sql\n".to_string();
-                self.bpfoutput.push_str(&ast_result.unwrap_err().to_string());
-            }
+            self.update_sql();
+        }
+    }
+
+    fn update_sql(&mut self) {
+        let s = self.textarea.lines().join("\n");
+        let ast_result = parse_bpfquery_sql(&s);
+        if let Ok(ast) = ast_result {
+            let (bpfoutput, headers) = compile_ast_to_bpftrace(ast);
+            self.bpfoutput = bpfoutput;
+            self.headers = headers;
+        } else {
+            self.bpfoutput = "Error parsing sql\n".to_string();
+            self.bpfoutput
+                .push_str(&ast_result.unwrap_err().to_string());
         }
     }
 
@@ -151,26 +185,23 @@ impl Widget for &App {
 
         // Make the table on the right
 
-
         // Put the headers in there
         let heading = Row::new(self.headers.clone());
 
-        let widths = self.headers.iter().map(|_| Constraint::Percentage(100 / self.headers.len() as u16)).collect::<Vec<_>>();
+        let widths = self
+            .headers
+            .iter()
+            .map(|_| Constraint::Percentage(100 / self.headers.len() as u16))
+            .collect::<Vec<_>>();
 
         // convert the results into rows
         let mut rows = Vec::new();
         for result in self.results.clone() {
-            let mut row = Vec::new();
-            for header in self.headers.clone() {
-                let value = result[header.as_str()].to_string();
-                row.push(value);
-            }
-            rows.push(Row::new(row));
+            rows.push(Row::new(result));
         }
 
-
         let table = Table::new(rows, widths)
-            // ...and they can be separated by a fixed spacing.
+            // ...and   they can be separated by a fixed spacing.
             .column_spacing(1)
             // It has an optional header, which is simply a Row always visible at the top.
             .header(heading)

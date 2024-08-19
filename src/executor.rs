@@ -1,23 +1,18 @@
-use home::home_dir;
-use openssh::{KnownHosts, Session, Stdio};
+use openssh::{Session, Stdio, KnownHosts};
 use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::signal::ctrl_c;
+use tokio::sync::watch;
 
-use sqlparser::ast::*;
-
-use crate::bpftrace_compiler;
-use crate::parser;
-
-async fn execute_sql(session: &Session, sql: &str) {
-    let ast = parser::parse_bpfquery_sql(sql).unwrap();
-    let (bpftrace_output, headers) = bpftrace_compiler::compile_ast_to_bpftrace(ast);
+pub async fn execute_sql(hostname: String, headers: Vec<String>, bpf: String, results_sender: watch::Sender<Vec<Vec<String>>>) {
+    let session = Session::connect(hostname, KnownHosts::Strict)
+    .await
+    .unwrap();
 
     let mut remote_cmd = session.command("bpftrace");
     remote_cmd.arg("-f");
     remote_cmd.arg("json");
     remote_cmd.arg("-e");
-    remote_cmd.arg(bpftrace_output);
+    remote_cmd.arg(bpf);
     remote_cmd.stdout(Stdio::piped());
 
     let mut handle = remote_cmd.spawn().await.unwrap();
@@ -27,7 +22,8 @@ async fn execute_sql(session: &Session, sql: &str) {
 
     let mut lines = stdout_reader.lines();
 
-    // Use `select!` to wait for either Ctrl-C or the next line
+    let mut rows = [].to_vec();
+
     loop {
         match lines.next_line().await {
             Ok(Some(line)) => {
@@ -58,13 +54,14 @@ async fn execute_sql(session: &Session, sql: &str) {
                     let value = d[header.as_str()].to_string();
                     row.push(value);
                 }
-                println!("{:?}", row);
+                rows.push(row);
+                results_sender.send(rows.clone()).unwrap();
             }
             Ok(None) => break, // End of stream
             Err(e) => {
                 eprintln!("Error reading line: {}", e);
                 break;
             }
-        }
+        } 
     }
 }
