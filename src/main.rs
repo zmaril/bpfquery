@@ -3,19 +3,24 @@ mod parser;
 use openssh::{KnownHosts, Session, Stdio};
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result};
-use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::signal::ctrl_c;
 use home::home_dir;
+use std::collections::HashMap;
+
+use tabled::{builder::Builder, settings::Style};
 
 async fn execute_sql(session: &Session,sql: &str) {
-    println!("Executing SQL: {}", sql);
+    //println!("Executing SQL: {}", sql);
     let ast = parser::parse_bpfquery_sql(sql);
-    let bpftrace_output = bpftrace_compiler::compile_ast_to_bpftrace(ast);
+    let (bpftrace_output, headers) = bpftrace_compiler::compile_ast_to_bpftrace(ast);
     // actually run the bpftrace output on the target machine
     let bpftrace_command = format!("bpftrace -e '{}'", bpftrace_output);
-    println!("{}", bpftrace_command);
+    //println!("{}", bpftrace_command);
 
     let mut remote_cmd = session.command("bpftrace");
+    remote_cmd.arg("-f");
+    remote_cmd.arg("json");
     remote_cmd.arg("-e");
     remote_cmd.arg(bpftrace_output);
     remote_cmd.stdout(Stdio::piped());
@@ -27,6 +32,19 @@ async fn execute_sql(session: &Session,sql: &str) {
 
     let mut lines = stdout_reader.lines();
 
+
+    let mut builder = Builder::default();
+    let mut new_headers = Vec::new(); 
+    new_headers.push("id".to_string());
+    for header in headers.clone() {
+        new_headers.push(header.clone());
+    }
+    builder.insert_record(0, new_headers );
+
+    let mut table = builder.clone().build();
+    table.with(Style::psql());
+    println!("{}",table);
+
     // Use `select!` to wait for either Ctrl-C or the next line
     loop {
         tokio::select! {
@@ -36,7 +54,40 @@ async fn execute_sql(session: &Session,sql: &str) {
             line = lines.next_line() => {
                 match line {
                     Ok(Some(line)) => {
-                        println!("{}", line);
+                        //parse json 
+                        let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+                        if v["type"] == "attached_probes" {
+                            continue;
+                        }
+                        //convert array of key value pairs to dict 
+
+                        let mut d = HashMap::new();
+                        let mut id = 0;
+
+                        for kv in v["data"].as_array().unwrap() {
+                            let k = kv[0].as_str().unwrap();
+                            let v = &kv[1];
+                            if k == "id" {
+                                id = v.as_u64().unwrap();
+                            }
+                            else {
+                                d.insert(k, v.clone());
+                            }
+                        }
+
+                        let mut row = Vec::new();
+                        //put the id in 
+                        row.push(id.to_string());
+                        for header in headers.clone() {
+                             let value = d[header.as_str()].to_string();
+                             row.push(value);
+                        }
+                        builder.insert_record(id.try_into().unwrap(), row);
+
+                        let mut table = builder.clone().build();
+                        table.with(Style::psql());
+                        println!("{}",table);
+
                     }
                     Ok(None) => break, // End of stream
                     Err(e) => {

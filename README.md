@@ -27,3 +27,16 @@ Confirmation bias aside, I thought that if I could write a SQL parser and compil
 Right now bpfquery is (sort of) working. It's got a repl that (sort of works), a sql to bpftrace compiler that (sort of) works, and an executor that (sort of) works. What's next up is removing those (sort of) qualifiers and making it just work. 
 
 The main focus right now is expanding the SQL to BPF compiler to handle more SQL queries, with incidental improvements to the repl and executor as needed. Joins don't work, only the builtin bpftrace arguments like pid and comm are supported, expressions are not supported, and there's no streaming semantics yet. So figuring out how to make those work is the next step. Much later on, after I've nailed down the semantics of the language, I'd like to make it so that the backend can be switched out for other BPF backends like libbpf or bcc. But there's a lot of experimentation to do before that happens.
+
+# Todo
+
+* [ ] Joins
+* [ ] Expressions
+* [ ] Streaming semantics with UDF window like arroyo.dev
+* [ ] Access args
+* [ ] Test out more builtin stuff in bpftrace 
+* [ ] Write some tests
+* [ ] Get CI going
+* [ ] Put up some releases 
+* [ ] Make the CLI better 
+* [ ] add in background like beehive and yql 

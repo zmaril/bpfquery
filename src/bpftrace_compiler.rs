@@ -1,6 +1,6 @@
 use sqlparser::ast::*;
 
-pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> String {
+pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> (String, Vec<String>) {
     let q = match &ast[0] {
         Statement::Query(q) => q,
         _ => panic!("Expected a query"),
@@ -43,31 +43,37 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> String {
     for projection in projections {
         match projection {
             SelectItem::UnnamedExpr(e) => {
-                outputs.push(e);
+                outputs.push(e.to_string());
             }
             _ => panic!("Expected an
             expression"),
         }
     }
 
-    let mut printf = String::new();
-    printf.push_str("printf(\"");
+    let mut results_update = String::new();
+
+
+    results_update.push_str("@q1_id[\"id\"] = count();\n");
+
     for e in outputs.clone() {
-        printf.push_str(& format!("{} %d ", e));
+        results_update.push_str(&format!("$q1_{} = {};\n", e, e));
     }
-    printf.push_str("\\n\", ");
-    for e in outputs {
-        printf.push_str(& format!("{}, ", e));
+
+    //    print((("pid",$q1_pid), ("cpu", $q1_cpu ), ("elapsed", $q1_elapsed), ("id",@q1_id["id"]) ));
+
+    bpftrace.push_str(&results_update);
+
+    let mut print_str = String::new();
+    print_str.push_str("print((");
+    for e in outputs.clone() {
+        print_str.push_str(&format!("(\"{}\",$q1_{}),", e, e));
     }
-    printf.pop();
-    printf.pop();
+    print_str.push_str("(\"id\",@q1_id[\"id\"])");
+    print_str.push_str("));");
 
-    printf.push_str(");");
-
-    bpftrace.push_str(&printf);
-
+    bpftrace.push_str(&print_str);
 
     bpftrace.push_str(" }");
 
-    bpftrace
+    (bpftrace, outputs)
 }
