@@ -10,6 +10,14 @@ use std::collections::HashMap;
 
 use tabled::{builder::Builder, settings::Style};
 
+use crossterm::{
+    terminal::{Clear, ClearType},
+    cursor::{SavePosition, RestorePosition},
+    ExecutableCommand,
+};
+
+use std::io::{Write};
+
 async fn execute_sql(session: &Session,sql: &str) {
     //println!("Executing SQL: {}", sql);
     let ast = parser::parse_bpfquery_sql(sql);
@@ -32,6 +40,8 @@ async fn execute_sql(session: &Session,sql: &str) {
 
     let mut lines = stdout_reader.lines();
 
+    let mut stdout = std::io::stdout();
+    stdout.execute(SavePosition).unwrap();
 
     let mut builder = Builder::default();
     let mut new_headers = Vec::new(); 
@@ -86,8 +96,10 @@ async fn execute_sql(session: &Session,sql: &str) {
 
                         let mut table = builder.clone().build();
                         table.with(Style::psql());
+                        stdout.execute(RestorePosition).unwrap();
+                        stdout.execute(Clear(ClearType::FromCursorDown)).unwrap();
                         println!("{}",table);
-
+                        stdout.flush().unwrap();
                     }
                     Ok(None) => break, // End of stream
                     Err(e) => {
