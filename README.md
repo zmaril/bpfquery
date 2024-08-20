@@ -5,11 +5,11 @@ An experiment with compiling SQL to BPF(trace) programs.
 ```bash
 git clone git@github.com:zmaril/bpfquery.git
 cd bpfquery
-cargo install --path .
-bpfquery devserver #some linux server you have ssh access to that has bpftrace installed on it 
+cargo run devserver #some linux server you have ssh access to that has bpftrace installed on it 
 > select pid, cpu, elapsed from kprobe.do_nanosleep;
 # watch as bpftrace sends info back about things
 ```
+<a href="https://asciinema.org/a/672845" target="_blank"><img src="https://asciinema.org/a/672845.svg" /></a>
 
 # Design/Roadmap 
 
@@ -76,4 +76,4 @@ Confirmation bias aside, I thought that if I could write a SQL parser and compil
 
 # License/Contributing
 
-This project is not licensed yet and I do not know if I want outside contributions yet. It's a personal experiment and I'm more focused on experimenting than I am about licensing or others at the moment. If you have any questions or want to talk about it, feel free to reach out to me on [twitter](https://twitter.com/zackmaril) or [linkedin](https://www.linkedin.com/in/zack-maril/).
+This project is not licensed yet and I do not know if I want outside contributions yet. It's a personal experiment and I'm more focused on experimenting than I am about licensing or others at the moment. If you have any questions, feel free to reach out to me on [twitter](https://twitter.com/zackmaril) or [linkedin](https://www.linkedin.com/in/zack-maril/).

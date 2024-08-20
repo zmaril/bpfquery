@@ -69,7 +69,6 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
         None => vec![],
     };
 
-    dbg!(filters.clone());
     if !filters.is_empty() {
         bpftrace.push_str(" /");
         for filter in filters {
@@ -137,6 +136,5 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
     }
 
     bpftrace.push_str(" }");
-    println!("{}",bpftrace.clone());
     Ok((bpftrace, headers))
 }
