@@ -39,6 +39,7 @@ The main focus right now is expanding the SQL to BPF compiler to handle more SQL
 * [ ] Get CI going
 * [ ] Put up some releases 
 * [ ] add in background like beehive and yql 
-* [ ] Make it not hang 
+* [ ] Make it not hang  as much
+* [ ] put in a bpf explainer thing for probes and the various structs 
 * [ ] Write some docs
 * [ ] Make the table scrollable 

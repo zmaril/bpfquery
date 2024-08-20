@@ -20,10 +20,11 @@ use ratatui::{
 use std::io::{self, stdout, Stdout};
 use tokio::sync::watch;
 use tokio::task;
-use tui_textarea::{CursorMove, TextArea};
+use tui_textarea::TextArea;
+use serde_json::Value;
 
 use crate::bpftrace_compiler::compile_ast_to_bpftrace;
-use crate::executor::execute_sql;
+use crate::executor::execute_bpf;
 use crate::parser::parse_bpfquery_sql;
 
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
@@ -50,14 +51,14 @@ pub struct App {
     pub textarea: TextArea<'static>,
     pub bpfoutput: String,
     pub headers: Vec<String>,
-    pub results: Vec<Vec<String>>,
-    pub results_sender: watch::Sender<Vec<Vec<String>>>,
+    pub results: Vec<Vec<Value>>,
+    pub results_sender: watch::Sender<Vec<Vec<Value>>>,
     pub task: task::JoinHandle<()>,
 }
 
 impl App {
     pub async fn run(&mut self, terminal: &mut Tui) -> io::Result<()> {
-        let (results_sender, results_reciever) = watch::channel(self.results.clone());
+        let (results_sender, rx) = watch::channel(self.results.clone());
         self.results_sender = results_sender;
 
         self.update_sql();
@@ -69,10 +70,10 @@ impl App {
             terminal.draw(|frame| self.render_frame(frame))?;
             // select! for results recievere and for handling events
             self.handle_events()?;
-            // let data = results_reciever.borrow().clone();
-            // if self.results != *data {
-            //     self.results = data.clone();
-            // }
+            let data = rx.borrow().clone();
+            if self.results != *data {
+                self.results = data.clone();
+            }
         }
         Ok(())
     }
@@ -117,7 +118,7 @@ impl App {
 
         if let Ok(ast) = ast_result {
             let r = compile_ast_to_bpftrace(ast);
-            if let Ok((bpfoutput, headers)) = r  {
+            if let Ok((bpfoutput, headers)) = r {
                 if bpfoutput != self.bpfoutput {
                     self.bpfoutput = bpfoutput;
                     self.headers = headers;
@@ -131,11 +132,10 @@ impl App {
                     results_sender.send(vec![]).unwrap();
 
                     self.task = task::spawn(async {
-                        execute_sql(h, he, b, results_sender).await;
+                        execute_bpf(h, he, b, results_sender).await;
                     });
                 }
-            }
-            else {
+            } else {
                 self.bpfoutput = "Error compiling sql:\n".to_string();
                 self.bpfoutput.push_str(&r.unwrap_err());
             }
@@ -204,7 +204,8 @@ impl Widget for &App {
         // Make the table on the right
         if self.results.len() == 1 && self.results[0].len() == 1 {
             //Display a paragraph with the error
-            let error = Paragraph::new(Text::from(self.results[0][0].clone()))
+            let s = self.results[0][0].to_string();
+            let error = Paragraph::new(Text::from(s))
                 .alignment(Alignment::Left)
                 .wrap(ratatui::widgets::Wrap { trim: true });
             error.render(right, buf);
@@ -224,7 +225,11 @@ impl Widget for &App {
             // convert the results into rows
             let mut rows = Vec::new();
             for result in self.results.clone() {
-                rows.push(Row::new(result));
+                let s = result
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<String>>();
+                rows.push(Row::new(s));
             }
 
             let table = Table::new(rows, widths)

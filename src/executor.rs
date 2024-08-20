@@ -3,12 +3,13 @@ use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::select;
 use tokio::sync::watch;
+use serde_json::Value;
 
-pub async fn execute_sql(
+pub async fn execute_bpf(
     hostname: String,
     headers: Vec<String>,
     bpf: String,
-    results_sender: watch::Sender<Vec<Vec<String>>>,
+    results_sender: watch::Sender<Vec<Vec<Value>>>,
 ) {
     let session = Session::connect(hostname, KnownHosts::Strict)
         .await
@@ -39,7 +40,7 @@ pub async fn execute_sql(
         select! {
         error = errors.next_line() => match error {
             Ok(Some(line)) => {
-                    rows = [[line].to_vec()].to_vec();
+                    rows = [[Value::String(line)].to_vec()].to_vec();
                     results_sender.send(rows.clone()).unwrap();
                     break;
             }
@@ -53,9 +54,18 @@ pub async fn execute_sql(
             match line {
                 Ok(Some(line)) => {
                     //parse json
+                    if line.is_empty() {
+                        continue;
+                    }
                     let v: serde_json::Value = serde_json::from_str(&line).unwrap();
                     if v["type"] == "attached_probes" {
                         continue;
+                    }
+                    if v["type"] == "map" {
+                        //for now, this indicates the end of the query
+                        rows.push([Value::String("DONE".to_string())].to_vec());
+                        results_sender.send(rows).unwrap();
+                        break;
                     }
                     //convert array of key value pairs to dict
 
@@ -63,26 +73,36 @@ pub async fn execute_sql(
                     let mut id = 0;
 
                     for kv in v["data"].as_array().unwrap() {
-                        let k = kv[0].as_str().unwrap();
+                        let k = &kv[0];
                         let v = &kv[1];
-                        if k == "id" {
-                            id = v.as_u64().unwrap();
-                        } else {
-                            d.insert(k, v.clone());
+                        match k {
+                            serde_json::Value::Number(_) => {
+                                let i = k.as_u64().unwrap();
+                                let h = headers[i as usize].clone();
+                                d.insert(h.to_string(), v.clone());
+                            }
+                            serde_json::Value::String(_) => {
+                                id = v.as_u64().unwrap();
+                            }
+                            _ => {
+                                println!("unexpected key type");
+                            }
                         }
                     }
 
                     let mut row = Vec::new();
                     //put the id in
-                    row.push(id.to_string());
+                    row.push(Value::Number(serde_json::Number::from(id)));
                     for header in headers.clone() {
-                        let value = d[header.as_str()].to_string();
-                        row.push(value);
+                        let value = &d[header.as_str()];
+                        row.push(value.clone());
                     }
                     rows.push(row);
                     results_sender.send(rows.clone()).unwrap();
                 }
-                Ok(None) => break, // End of stream
+                Ok(None) => {
+                    results_sender.send([[Value::String("Done".to_string())].to_vec()].to_vec()).unwrap();
+                }, // End of stream
                 Err(e) => {
                     println!("Error reading line: {:?}", e);
                     break;
