@@ -25,11 +25,11 @@ The main focus right now is expanding the SQL to BPF compiler to handle more SQL
 # Progress so far 
 
 * [x] Expressions - a lot of expressions just work so far, but there's a lot of edge cases to handle to as they come up, but the expectation is that something like `select pid + 1 from kprobe.do_nanosleep` should work.
-* [*] Predicates/filtering/`where` - `where` clauses get parsed and compiled into predicates and often work. `select * from kprobe.do_nanosleep where pid > 1000` should work fine.
-* [*] bpftrace builtin arguments - things like `pid`, `comm`, `cpu`, `elapsed` work well, they are more or less just passed through to the bpftrace program as is. 
-* [*] TUI - there's a cool TUI that let's you type in sql queries, see the bpftrace output, and then streams the results from whichever server you're targeting.
-* [*] CLI - you can use '-e' to run a query on a server.
-* [*] Execution - bpfquery can run a query on a server and get the results back.
+* [x] Predicates/filtering/`where` - `where` clauses get parsed and compiled into predicates and often work. `select * from kprobe.do_nanosleep where pid > 1000` should work fine.
+* [x] bpftrace builtin arguments - things like `pid`, `comm`, `cpu`, `elapsed` work well, they are more or less just passed through to the bpftrace program as is. 
+* [x] TUI - there's a cool TUI that let's you type in sql queries, see the bpftrace output, and then streams the results from whichever server you're targeting.
+* [x] CLI - you can use '-e' to run a query on a server.
+* [x] Execution - bpfquery can run a query on a server and get the results back.
 
 
 # Zack's Todo's 
