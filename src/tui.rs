@@ -20,7 +20,7 @@ use ratatui::{
 use std::io::{self, stdout, Stdout};
 use tokio::sync::watch;
 use tokio::task;
-use tui_textarea::TextArea;
+use tui_textarea::{CursorMove, TextArea};
 
 use crate::bpftrace_compiler::compile_ast_to_bpftrace;
 use crate::executor::execute_sql;
@@ -69,10 +69,10 @@ impl App {
             terminal.draw(|frame| self.render_frame(frame))?;
             // select! for results recievere and for handling events
             self.handle_events()?;
-            let data = results_reciever.borrow().clone();
-            if self.results != *data {
-                self.results = data.clone();
-            }
+            // let data = results_reciever.borrow().clone();
+            // if self.results != *data {
+            //     self.results = data.clone();
+            // }
         }
         Ok(())
     }
@@ -106,9 +106,18 @@ impl App {
 
     fn update_sql(&mut self) {
         let s = self.textarea.lines().join("\n");
+        //let formatted = sqlformat::format(&s, &sqlformat::QueryParams::None, sqlformat::FormatOptions { indent: sqlformat::Indent::Spaces(2), uppercase: true, lines_between_queries: 1 });
         let ast_result = parse_bpfquery_sql(&s);
+        // set text area to be formatted
+        //let cursor = self.textarea.cursor();
+        // self.textarea.select_all();
+        // self.textarea.cut();
+        // self.textarea.insert_str(&formatted);
+        // self.textarea.move_cursor(CursorMove::Jump(cursor.0 as u16, cursor.1 as u16));
+
         if let Ok(ast) = ast_result {
-            if let Ok((bpfoutput, headers)) = compile_ast_to_bpftrace(ast) {
+            let r = compile_ast_to_bpftrace(ast);
+            if let Ok((bpfoutput, headers)) = r  {
                 if bpfoutput != self.bpfoutput {
                     self.bpfoutput = bpfoutput;
                     self.headers = headers;
@@ -125,6 +134,10 @@ impl App {
                         execute_sql(h, he, b, results_sender).await;
                     });
                 }
+            }
+            else {
+                self.bpfoutput = "Error compiling sql:\n".to_string();
+                self.bpfoutput.push_str(&r.unwrap_err());
             }
         } else {
             self.bpfoutput = "Error parsing sql\n".to_string();

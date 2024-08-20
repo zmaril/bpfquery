@@ -1,30 +1,30 @@
 use sqlparser::ast::*;
-use std::io::Result;
+use std::result::Result;
 
 
-pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<String>)> {
+pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<String>), &'static str> {
     let q = match &ast[0] {
         Statement::Query(q) => q,
-        _ => panic!("Expected a query"),
+        _ => return Err("Expected a query"),
     };
     let b = q.body.as_ref();
 
     let projections = match b {
         SetExpr::Select(s) => &s.projection,
-        _ => panic!("Expected a select"),
+        _ => return Err("Expected a select"),
     };
 
 
     let probe_relations = match b {
         SetExpr::Select(s) => &s.from,
-        _ => panic!("Expected a select"),
+        _ => return Err("Expected a select"),
     };
 
 
     let probes = probe_relations[0].clone().relation;
     let name = match &probes {
         TableFactor::Table { name, .. } => name,
-        _ => panic!("Expected a table"),
+        _ => return Err("Expected a table"),
     };
     //convert table name to probe name
     let probe_name = name.to_string().replace(".", ":");
@@ -47,18 +47,17 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
             SelectItem::UnnamedExpr(e) => {
                 outputs.push(e.to_string());
             }
-            _ => panic!("Expected an
-            expression"),
+            _ => return Err("Expected an expression"),
         }
     }
 
     let mut results_update = String::new();
 
 
-    results_update.push_str("\t@q1_id[\"id\"] = count();\n");
+    results_update.push_str("@q1_id[\"id\"] = count();\n");
 
     for e in outputs.clone() {
-        results_update.push_str(&format!("\t$q1_{} = {};\n", e, e));
+        results_update.push_str(&format!("$q1_{} = {};\n", e, e));
     }
 
     //    print((("pid",$q1_pid), ("cpu", $q1_cpu ), ("elapsed", $q1_elapsed), ("id",@q1_id["id"]) ));
@@ -67,7 +66,7 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
 
     let mut print_str = String::new();
 
-    print_str.push_str("\tprint((");
+    print_str.push_str("print((");
     print_str.push_str("(\"id\",@q1_id[\"id\"]),");
     for e in outputs.clone() {
         print_str.push_str(&format!("(\"{}\",$q1_{}),", e, e));
