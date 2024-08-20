@@ -1,13 +1,26 @@
 use sqlparser::ast::*;
 use std::result::Result;
 
+fn parse_value(v: &Value) -> String {
+    match v {
+        Value::SingleQuotedString(s) => format!("\"{}\"",s.clone()),
+        _ => v.to_string(),
+    }
+}
+
 fn parse_expr(e: &Expr) -> String {
     match e {
         Expr::Identifier(i) => i.value.clone(),
         Expr::Wildcard => "*".to_string(),
-        Expr::Value(v) => v.to_string(),
+        Expr::Value(v) => parse_value(v),
         Expr::BinaryOp { left, op, right } => {
-            format!("{} {} {}", parse_expr(left), op, parse_expr(right))
+            let mut ooop = op.to_string(); 
+            // if it's an ==, we need to convert it to a =
+            if ooop == "=" {
+                ooop = "==".to_string();
+            }
+
+            format!("{} {} {}", parse_expr(left), ooop, parse_expr(right))
         }
         _ => "".to_string(),
     }
@@ -18,24 +31,23 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
         Statement::Query(q) => q,
         _ => return Err("Expected a query"),
     };
+
     let b = q.body.as_ref();
 
-    let projections = match b {
-        SetExpr::Select(s) => &s.projection,
+    let select = match b {
+        SetExpr::Select(s) => s,
         _ => return Err("Expected a select"),
     };
 
-    let probe_relations = match b {
-        SetExpr::Select(s) => &s.from,
-        _ => return Err("Expected a select"),
-    };
+    let projections = &select.projection;
+    let relations = &select.from;
 
     let mut quick_exit = false;
-    let probe_name = if probe_relations.is_empty() {
+    let probe_name = if relations.is_empty() {
         quick_exit = true;
         "BEGIN".to_string()
     } else {
-        let probes = probe_relations[0].clone().relation;
+        let probes = relations[0].clone().relation;
         let name = match &probes {
             TableFactor::Table { name, .. } => name,
             _ => return Err("Expected a table"),
@@ -50,17 +62,50 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
 
     //convert from into bpftrace probe
     bpftrace.push_str(&probe_name);
+
+    //add where/filter in, optional might not be there so we need to check
+    let filters = match &select.selection {
+        Some(e) => vec![e],
+        None => vec![],
+    };
+
+    dbg!(filters.clone());
+    if !filters.is_empty() {
+        bpftrace.push_str(" /");
+        for filter in filters {
+            bpftrace.push_str(&parse_expr(filter));
+        }
+        bpftrace.push_str("/ ");
+    }
+
+
+
     bpftrace.push_str("\n {\n");
 
     // print out the projections
 
+
+    let mut headers = Vec::new();
     let mut outputs = Vec::new();
 
     for projection in projections {
         match projection {
             SelectItem::UnnamedExpr(e) => {
+                headers.push(e.to_string());
                 outputs.push(parse_expr(e));
             }
+            SelectItem::ExprWithAlias { expr, alias } => {
+                headers.push(alias.value.clone());
+                outputs.push(parse_expr(expr));
+            }
+            SelectItem::Wildcard(w) => {
+                let opts = ["comm", "pid", "cpu", "elapsed"];
+                for opt in opts.iter() {
+                    headers.push(opt.to_string());
+                    outputs.push(opt.to_string());
+                }
+            }
+
             _ => return Err("Expected an expression"),
         }
     }
@@ -92,6 +137,6 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
     }
 
     bpftrace.push_str(" }");
-
-    Ok((bpftrace, outputs))
+    println!("{}",bpftrace.clone());
+    Ok((bpftrace, headers))
 }

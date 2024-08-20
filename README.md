@@ -1,6 +1,6 @@
 # bpfquery
 
-An experiment with compiling SQL to BPF programs. Only the following example works and the backend target is only bpftrace running on the targeted server.
+An experiment with compiling SQL to BPF(trace) programs. 
 
 ```bash
 git clone git@github.com:zmaril/bpfquery.git
@@ -10,6 +10,57 @@ bpfquery devserver #some linux server you have ssh access to that has bpftrace i
 > select pid, cpu, elapsed from kprobe.do_nanosleep;
 # watch as bpftrace sends info back about things
 ```
+
+# Design/Roadmap 
+
+Right now bpfquery is (sort of) working. It's got a TUI and CLI that (sort of works), a sql to bpftrace compiler that (sort of) works, and an executor that (sort of) works. What's next up is removing those (sort of) qualifiers and making it just work. 
+
+The main focus right now is expanding the SQL to BPF compiler to handle more SQL queries, with incidental improvements to the UI and executor as needed. Joins don't work, only the builtin bpftrace arguments like pid and comm are supported, and there's no streaming semantics yet. So figuring out how to make those work is the next step. Much later on, after I've nailed down the semantics of the language, I'd like to make it so that the backend can be switched out for other BPF backends like libbpf or bcc. But there's a lot of experimentation to do before that happens.
+
+# Related Work
+
+* [bpftrace](https://github.com/bpftrace/bpftrace)
+* ebql - [code](https://github.com/ringtack/ebql) and [paper](https://etos.cs.brown.edu/publications/theses/rtang-honors.pdf)
+
+# Progress so far 
+
+* [x] Expressions - a lot of expressions just work so far, but there's a lot of edge cases to handle to as they come up, but the expectation is that something like `select pid + 1 from kprobe.do_nanosleep` should work.
+* [*] Predicates/filtering/`where` - `where` clauses get parsed and compiled into predicates and often work. `select * from kprobe.do_nanosleep where pid > 1000` should work fine.
+* [*] bpftrace builtin arguments - things like `pid`, `comm`, `cpu`, `elapsed` work well, they are more or less just passed through to the bpftrace program as is. 
+* [*] TUI - there's a cool TUI that let's you type in sql queries, see the bpftrace output, and then streams the results from whichever server you're targeting.
+* [*] CLI - you can use '-e' to run a query on a server.
+* [*] Execution - bpfquery can run a query on a server and get the results back.
+
+
+# Zack's Todo's 
+Ordered roughly by what I want to do next.
+
+* [ ] Explore streaming joins across tables.
+* [ ] Explore streaming semantics with UDF window like arroyo.dev
+* [ ] Explore putting charts in the TUI and seeing if that's useful.
+* [ ] Typing in the TUI is slow sometimes and hangs, unsure why.
+* [ ] Type checking and hints, see first problem query below. 
+* [ ] Try out other probes besides kprobe
+* [ ] Figure out how bpftrace name star will work, i.e. `select pid from kprobe.*` equivalent.
+* [ ] Experiment with static table access, like looking things up about the os before hand in a table. 
+* [ ] Experiment with args from `tracepoint`, `kfunc`, and `uprobe` 
+* [ ] Write some tests, starting to get tough to keep track of what works and what doesn't. 
+* [ ] Set up CI pipelines with releases 
+* [ ] Make the TUI sections (table, editor) all scrollable 
+* [ ] Expand the TUI to have like menus and stuff.
+* [ ] Put some examples into the TUI premade for people to try out 
+* [ ] Have a bpf struct and bpftrace probe tree explorer/explainer so people can see what's available to them.
+* [ ] Use the output of vmlinux.h and bpftrace.lv.txt somehow to make the bpftrace program more robust, combined with static type checking or something, but also just knowing ahead of time whether a tracepoint exists 
+* [ ] Write some docs about how to use everything, what can be expected to work. 
+
+
+# Problem Queries 
+
+```sql
+//stdin:1:26-27: WARNING: comparison of integers of different signs: 'unsigned int64' and 'int64' can lead to undefined behavior
+select * from kprobe.do_nanosleep where pid > 2*1000
+```
+
 
 # Motivation
 
@@ -22,24 +73,7 @@ During this time, I read a lot of programs that others had written and saw the t
 
 Confirmation bias aside, I thought that if I could write a SQL parser and compiler that could take a SQL query and turn it into a BPF program, I could make it easier for people (i.e. me) to write use BPF-based programs and better understand what's going on in the kernel. I had bought and read through [a book on complex event processing](https://www.amazon.com/Power-Events-Introduction-Processing-Distributed/dp/0201727897) many years ago and recently saw [ksqlDB](https://ksqldb.io/) used to great effect at my previous job, so I figured why not take a stab at it while I have some time. So far, it's been a lot of fun and I've learned a lot about SQL and BPF in the process. Maybe someday, others will find it useful too.
 
-# Design/Roadmap 
 
-Right now bpfquery is (sort of) working. It's got a repl that (sort of works), a sql to bpftrace compiler that (sort of) works, and an executor that (sort of) works. What's next up is removing those (sort of) qualifiers and making it just work. 
+# License/Contributing
 
-The main focus right now is expanding the SQL to BPF compiler to handle more SQL queries, with incidental improvements to the repl and executor as needed. Joins don't work, only the builtin bpftrace arguments like pid and comm are supported, expressions are not supported, and there's no streaming semantics yet. So figuring out how to make those work is the next step. Much later on, after I've nailed down the semantics of the language, I'd like to make it so that the backend can be switched out for other BPF backends like libbpf or bcc. But there's a lot of experimentation to do before that happens.
-
-# Todo
-
-* [ ] Joins
-* [ ] Expressions
-* [ ] Streaming semantics with UDF window like arroyo.dev
-* [ ] Access args
-* [ ] Test out more builtin stuff in bpftrace 
-* [ ] Write some tests
-* [ ] Get CI going
-* [ ] Put up some releases 
-* [ ] add in background like beehive and yql 
-* [ ] Make it not hang  as much
-* [ ] put in a bpf explainer thing for probes and the various structs 
-* [ ] Write some docs
-* [ ] Make the table scrollable 
+This project is not licensed yet and I do not know if I want outside contributions yet. It's a personal experiment and I'm more focused on experimenting than I am about licensing or others at the moment. If you have any questions or want to talk about it, feel free to reach out to me on [twitter](https://twitter.com/zackmaril) or [linkedin](https://www.linkedin.com/in/zack-maril/).
