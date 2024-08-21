@@ -60,6 +60,8 @@ Ordered roughly by what I want to do next.
 ```sql
 //stdin:1:26-27: WARNING: comparison of integers of different signs: 'unsigned int64' and 'int64' can lead to undefined behavior
 select * from kprobe.do_nanosleep where pid > 2*1000
+//I want this to work it and it doesnt yet 
+SELECT tumble(interval '10 seconds') as bucket, count(*) FROM kprobe.do_nanosleep GROUP BY bucket;
 ```
 
 

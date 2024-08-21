@@ -2,7 +2,7 @@
 
 This document contains some thoughts on how to implement streaming semantics for bpfquery.
 
-To start with, going to write out some questions I have with my current answers to them. Currently writing this with ["What is streaming sql?" by Arroyo et al. in mind](https://www.arroyo.dev/blog/what-is-streaming-sql). 
+To start with, going to write out some questions I have with my current answers to them. Currently writing this with ["What is streaming sql?" from Arroyo](https://www.arroyo.dev/blog/what-is-streaming-sql) and [a conversation with chapgpt](https://chatgpt.com/share/9bd39e60-d24f-446e-bd5e-1d2194e860bf) in mind.
 
 > How parallel is the execution of an bpf program (and also bpftrace)?
 
@@ -26,8 +26,6 @@ Standard joins have a static amount of data to work with that is knowable at que
 
 > What is an aggregated query?
 
-[A conversation with chapgpt influnced this and following secitons](https://chatgpt.com/share/9bd39e60-d24f-446e-bd5e-1d2194e860bf)
-
 An aggregated query is a query that has an aggregate function in it. This is a function that takes a set of rows and produces a single value. Examples of this are `sum`, `avg`, `count`, `min`, `max`. If a query does not have an aggregate function in it, then it doesn't really matter whether it is a streaming query or not, it can be evaluated as soon as the data is available. The streaming queries will just return all the rows as they come in, applying where clauses and the like, while a standard query will just return the rows from the bounded set of data. We only have to start talking about watermarks and the like when we have an aggregate function in a streaming query.
 
 
@@ -38,19 +36,17 @@ Streaming queries are unbounded, meaning the rows can come in forever. An aggreg
 ### 1. **Tumbling Window**
 **Explanation**: A tumbling window is a fixed-size, non-overlapping window that groups events into distinct time intervals.
 
-**Example Query**: Count the number of events in each 5-minute interval.
-
-**Example Systems**: Apache Kafka Streams, Apache Flink
+**Example Query**: Count the number of events in each hour long interval.
 
 **SQL Query**:
 ```sql
 SELECT 
-    TUMBLE_START(event_time, INTERVAL '5' MINUTE) AS window_start,
+    TUMBLE(INTERVAL '1' HOUR) as hour,
     COUNT(*) AS event_count
 FROM 
     events
 GROUP BY 
-    TUMBLE(event_time, INTERVAL '5' MINUTE);
+    hour;
 ```
 
 **Mermaid.js Diagram**:
@@ -59,10 +55,10 @@ gantt
     dateFormat  HH:mm
     axisFormat  %H:%M
     section Tumbling Window
-    Window 1    :a1, 00:00, 00:05
-    Window 2    :a2, 00:05, 00:10
-    Window 3    :a3, 00:10, 00:15
-    Window 4    :a4, 00:15, 00:20
+    Window 1    :a1, 00:00, 01:00
+    Window 2    :a2, 01:00, 02:00
+    Window 3    :a3, 02:00, 03:00
+    Window 4    :a4, 03:00, 04:00
 ```
 
 ---
@@ -71,8 +67,6 @@ gantt
 **Explanation**: A sliding window is a fixed-size window that overlaps, meaning an event can belong to multiple windows as the window slides over the data.
 
 **Example Query**: Calculate the moving average of user activity every 5 minutes, sliding every 1 minute.
-
-**Example Systems**: Apache Spark Streaming, Apache Beam
 
 **SQL Query**:
 ```sql
@@ -104,8 +98,6 @@ gantt
 
 **Example Query**: Group user activity into sessions where a session ends if there is no activity for 10 minutes.
 
-**Example Systems**: Apache Flink, Google Cloud Dataflow (Apache Beam)
-
 **SQL Query**:
 ```sql
 SELECT 
@@ -136,8 +128,6 @@ gantt
 
 **Example Query**: Calculate the sum of transactions in a 10-minute window that hops every 5 minutes.
 
-**Example Systems**: Apache Kafka Streams, Apache Flink
-
 **SQL Query**:
 ```sql
 SELECT 
@@ -167,8 +157,6 @@ gantt
 **Explanation**: A count window groups events based on a fixed number of events instead of time.
 
 **Example Query**: Batch process every 100 events.
-
-**Example Systems**: Apache Storm, Apache Kafka Streams
 
 **SQL Query**:
 ```sql
@@ -217,8 +205,6 @@ flowchart TB
 
 **Example Query**: Calculate the total number of users since the application started.
 
-**Example Systems**: Apache Beam, Apache Flink
-
 **SQL Query**:
 ```sql
 SELECT 
@@ -245,8 +231,6 @@ flowchart TB
 **Explanation**: Watermarking handles out-of-order events by generating timestamps (watermarks) that signal when a certain point in time has been reached, allowing windows to close and results to emit even if some late events arrive.
 
 **Example Query**: Handle late-arriving events in a 5-minute window with a watermark allowing a 1-minute delay.
-
-**Example Systems**: Apache Flink, Google Cloud Dataflow (Apache Beam)
 
 **SQL Query**:
 ```sql
@@ -280,8 +264,6 @@ flowchart TB
 
 **Example Query**: Group user activity into sessions, but vary the session timeout based on user activity patterns.
 
-**Example Systems**: Apache Flink, Google Cloud Dataflow (Apache Beam)
-
 **SQL Query**:
 ```sql
 SELECT 
@@ -304,7 +286,3 @@ gantt
     Gap         :done, 00:07, 00:10
     Session 2   :a2, 00:10, 00:17
 ```
-
----
-
-This comprehensive output includes everything you need to understand each window type, including explanations, example queries, SQL
