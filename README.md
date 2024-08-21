@@ -21,6 +21,7 @@ The main focus right now is expanding the SQL to BPF compiler to handle more SQL
 
 * [bpftrace](https://github.com/bpftrace/bpftrace)
 * ebql - [code](https://github.com/ringtack/ebql) and [paper](https://etos.cs.brown.edu/publications/theses/rtang-honors.pdf)
+* [Arroyo](https://arroyo.dev/) - a stream processing engine that bpfquery is inspiring a lot of bpfquery design so far.
 
 # Progress so far 
 
