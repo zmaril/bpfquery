@@ -3,8 +3,27 @@ use std::result::Result;
 
 fn parse_value(v: &Value) -> String {
     match v {
-        Value::SingleQuotedString(s) => format!("\"{}\"",s.clone()),
+        Value::SingleQuotedString(s) => format!("\"{}\"", s.clone()),
         _ => v.to_string(),
+    }
+}
+
+fn parse_fn_arg_expr(arg: &FunctionArgExpr) -> String {
+    match arg {
+        FunctionArgExpr::Expr(e) => parse_expr(e),
+        FunctionArgExpr::Wildcard => "*".to_string(),
+        FunctionArgExpr::QualifiedWildcard(o) => panic!("QualifiedWildcard not supported"),
+    }
+}
+
+fn parse_fn_arg(arg: &FunctionArg) -> String {
+    match arg {
+        FunctionArg::Named {
+            name,
+            arg,
+            operator: _,
+        } => format!("{}={}", name, parse_fn_arg_expr(arg)), // no idea what operator is
+        FunctionArg::Unnamed(e) => parse_fn_arg_expr(e),
     }
 }
 
@@ -14,13 +33,29 @@ fn parse_expr(e: &Expr) -> String {
         Expr::Wildcard => "*".to_string(),
         Expr::Value(v) => parse_value(v),
         Expr::BinaryOp { left, op, right } => {
-            let mut ooop = op.to_string(); 
+            let mut ooop = op.to_string();
             // if it's an ==, we need to convert it to a =
             if ooop == "=" {
                 ooop = "==".to_string();
             }
 
             format!("{} {} {}", parse_expr(left), ooop, parse_expr(right))
+        }
+        Expr::Function(f) => {
+            let fns = f.name.to_string();
+            match &f.args {
+                FunctionArguments::List(fl) => {
+                    let fargs = fl
+                        .args
+                        .iter()
+                        .map(parse_fn_arg)
+                        .collect::<Vec<String>>()
+                        .join(",");
+                    format!("{}({})", fns, fargs)
+                }
+                FunctionArguments::None => format!("{}()", fns),
+                FunctionArguments::Subquery(q) => panic!("Subquery not supported"),
+            }
         }
         _ => "".to_string(),
     }
@@ -77,12 +112,9 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
         bpftrace.push_str("/ ");
     }
 
-
-
     bpftrace.push_str("\n {\n");
 
     // print out the projections
-
 
     let mut headers = Vec::new();
     let mut outputs = Vec::new();
@@ -123,7 +155,7 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
 
     print_str.push_str("print((");
     print_str.push_str("(\"id\",@q1_id[\"id\"]),");
-    for (i,_) in outputs.clone().into_iter().enumerate() {
+    for (i, _) in outputs.clone().into_iter().enumerate() {
         print_str.push_str(&format!("({},$q1_{}),", i, i));
     }
     print_str.pop();
