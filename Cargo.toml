@@ -15,3 +15,5 @@ tui-textarea = "0.6.1"
 crossterm = "0.28.1"
 sqlformat = "0.2.4"
 clap = { version = "4.5.16", features = ["derive"] }
+rusqlite = "0.32.1"
+notify = "6.1.1"

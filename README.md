@@ -6,10 +6,24 @@ An experiment with compiling SQL to BPF(trace) programs.
 git clone git@github.com:zmaril/bpfquery.git
 cd bpfquery
 cargo run devserver #some linux server you have ssh access to that has bpftrace installed on it 
-> select pid, cpu, elapsed from kprobe.do_nanosleep;
 # watch as bpftrace sends info back about things
 ```
 <a href="https://asciinema.org/a/672845" target="_blank"><img src="https://asciinema.org/a/672845.svg" /></a>
+
+# Queries that work right now 
+```sql
+select pid, cpu, elapsed from kprobe.do_nanosleep; // getting some basic info from a kprobe
+select str(args.filename) from tracepoint.syscalls.sys_enter_openat; //get the filename from a tracepoint
+select * from kprobe.do_nanosleep where pid > 1000; // filters 
+```
+
+# Queries that don't work right now 
+```sql
+//stdin:1:26-27: WARNING: comparison of integers of different signs: 'unsigned int64' and 'int64' can lead to undefined behavior
+select * from kprobe.do_nanosleep where pid > 2*1000
+//Working on tumble and streaming semantics
+SELECT tumble(interval '10 seconds') as bucket, count(*) FROM kprobe.do_nanosleep GROUP BY bucket;
+```
 
 # Design/Roadmap 
 
@@ -53,17 +67,8 @@ Ordered roughly by what I want to do next.
 * [ ] Have a bpf struct and bpftrace probe tree explorer/explainer so people can see what's available to them.
 * [ ] Use the output of vmlinux.h and bpftrace.lv.txt somehow to make the bpftrace program more robust, combined with static type checking or something, but also just knowing ahead of time whether a tracepoint exists 
 * [ ] Write some docs about how to use everything, what can be expected to work. 
-
-
-# Problem Queries 
-
-```sql
-//stdin:1:26-27: WARNING: comparison of integers of different signs: 'unsigned int64' and 'int64' can lead to undefined behavior
-select * from kprobe.do_nanosleep where pid > 2*1000
-//I want this to work it and it doesnt yet 
-SELECT tumble(interval '10 seconds') as bucket, count(*) FROM kprobe.do_nanosleep GROUP BY bucket;
-```
-
+* [ ] Implement a LSP that uses the ctag definitions somehow.
+* [ ] Have linux kerenl defs just be a big json
 
 # Motivation
 
