@@ -1,7 +1,7 @@
 use openssh::{KnownHosts, Session, Stdio};
 use serde_json::Value;
 use std::collections::HashMap;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::sync::watch;
 
 pub async fn execute_bpf(

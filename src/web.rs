@@ -17,6 +17,38 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
 use warp::Filter;
 
+
+#[derive(Serialize, Clone)]
+struct BpftraceOutputMsg {
+    output: String,
+    headers: Vec<String>,
+}
+
+#[derive(Serialize, Clone)]
+struct BpftraceErrorMsg {
+    error_message: String,
+}
+
+#[derive(Serialize, Clone)]
+struct BpftraceResults {
+    results: Vec<Vec<serde_json::Value>>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(untagged)]
+enum ResponseData {
+    Output(BpftraceOutputMsg),
+    Error(BpftraceErrorMsg),
+    Results(BpftraceResults),
+}
+
+#[derive(Serialize, Clone)]
+struct ResponseMessage {
+    #[serde(flatten)]
+    data: ResponseData,
+    msg_type: String,
+}
+
 /// Our global unique user id counter.
 static NEXT_USER_ID: AtomicUsize = AtomicUsize::new(1);
 
@@ -25,7 +57,6 @@ static NEXT_USER_ID: AtomicUsize = AtomicUsize::new(1);
 /// - Key is their id
 /// - Value is a sender of `warp::ws::Message`
 type Users = Arc<RwLock<HashMap<usize, mpsc::UnboundedSender<Message>>>>;
-type Tasks = Arc<RwLock<HashMap<usize, mpsc::UnboundedSender<Message>>>>;
 
 pub async fn start_server(hostname: String) {
     pretty_env_logger::init();
@@ -34,22 +65,18 @@ pub async fn start_server(hostname: String) {
     // is a websocket sender.
     let users = Users::default();
 
-    // Keep track of all the spawn tasks
-    let tasks = Tasks::default();
     // Turn our "state" into a new Filter...
     let users = warp::any().map(move || users.clone());
-    let tasks = warp::any().map(move || tasks.clone());
 
     // GET /chat -> websocket upgrade
     let editor = warp::path("bpfquery")
         // The `ws()` filter will prepare Websocket handshake...
         .and(warp::ws())
         .and(users)
-        .and(tasks)
-        .map(move |ws: warp::ws::Ws, users, tasks| {
+        .map(move |ws: warp::ws::Ws, users| {
             let h = hostname.clone();
             // This will call our function if the handshake succeeds.
-            ws.on_upgrade(move |socket| user_connected(h, socket, users, tasks))
+            ws.on_upgrade(move |socket| user_connected(h, socket, users))
         });
 
     // GET / -> index html
@@ -71,7 +98,7 @@ pub async fn start_server(hostname: String) {
     dbg!(metrics.num_alive_tasks());
 }
 
-async fn user_connected(hostname: String, ws: WebSocket, users: Users, tasks: Tasks) {
+async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
     // Use a counter to assign a new unique ID for this user.
     let my_id = NEXT_USER_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -126,10 +153,6 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users, tasks: Ta
                t.abort();
                //TODO, ctrl-c does not work here at all
                std::process::exit(1);
-               break;
-           }
-           _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
-              dbg!("here!!");
            }
           result = user_ws_rx.next() => {
               if let Some(result) = result {
@@ -144,7 +167,7 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users, tasks: Ta
 
                   if let Some(ResponseMessage {
                       data:
-                          ResponseData::BpftraceOutput(BpftraceOutputMsg {
+                          ResponseData::Output(BpftraceOutputMsg {
                               output: new_output,
                               headers: new_headers,
                           }),
@@ -181,39 +204,26 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users, tasks: Ta
                     }
                     break;
                 }
-                println!("{:?}", data);
+                if let Some(tx) = users.read().await.get(&my_id) {
+                    let response = ResponseMessage {
+                        data: ResponseData::Results(BpftraceResults { results: data }),
+                        msg_type: "bpftrace_results".to_string(),
+                    };
+                    let response_string = serde_json::to_string(&response).unwrap();
+                    if let Err(_disconnected) = tx.send(Message::text(response_string.clone())) {
+                        println!("error sending message to user: {}", my_id);
+                    }
+                }
             }
         }
     }
     // user_ws_rx stream will keep processing as long as the user stays
     // connected. Once they disconnect, then...
+    t.abort();
+    tt.abort();
     user_disconnected(my_id, &users).await;
 }
 
-#[derive(Serialize, Clone)]
-struct BpftraceOutputMsg {
-    output: String,
-    headers: Vec<String>,
-}
-
-#[derive(Serialize, Clone)]
-struct BpftraceErrorMsg {
-    error_message: String,
-}
-
-#[derive(Serialize, Clone)]
-#[serde(tag = "type", content = "data")]
-enum ResponseData {
-    BpftraceOutput(BpftraceOutputMsg),
-    BpftraceError(BpftraceErrorMsg),
-}
-
-#[derive(Serialize, Clone)]
-struct ResponseMessage {
-    #[serde(flatten)]
-    data: ResponseData,
-    msg_type: String,
-}
 
 async fn user_message(my_id: usize, msg: Message, users: &Users) -> Option<ResponseMessage> {
     // Skip any non-Text messages...
@@ -232,12 +242,12 @@ async fn user_message(my_id: usize, msg: Message, users: &Users) -> Option<Respo
             let (output, headers) = compile_ast_to_bpftrace(ast).unwrap();
             // convert to json
             ResponseMessage {
-                data: ResponseData::BpftraceOutput(BpftraceOutputMsg { output, headers }),
+                data: ResponseData::Output(BpftraceOutputMsg { output, headers }),
                 msg_type: "bpftrace_output".to_string(),
             }
         }
         Err(e) => ResponseMessage {
-            data: ResponseData::BpftraceError(BpftraceErrorMsg {
+            data: ResponseData::Error(BpftraceErrorMsg {
                 error_message: e.to_string(),
             }),
             msg_type: "bpftrace_error".to_string(),

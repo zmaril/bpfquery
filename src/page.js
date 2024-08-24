@@ -25,18 +25,26 @@ ws.onopen = function () {
   sendSql();
 };
 
+var headers = [];
+
 ws.onmessage = function (msg) {
   let bpfv = document.getElementById("bpftrace-viewer");
   let d = JSON.parse(msg.data);
+  console.log(d.msg_type);
 
   if (d.msg_type == "bpftrace_output") {
-    bpfv.innerText = d.data.output;
+    bpfv.innerText = d.output;
+    headers = d.headers;
     bpfv.classList.add("bg-gray-200");
     bpfv.classList.remove("bg-red-200");
-  } else if (d.msg_type = "bpftrace_error") {
-    bpfv.innerText = d.data.error_message;
+  } else if (d.msg_type == "bpftrace_error") {
+    console.log("huh")
+    bpfv.innerText = d.error_message;
     bpfv.classList.add("bg-red-200");
     bpfv.classList.remove("bg-gray-200");
+  }
+  else if (d.msg_type == "bpftrace_results") {
+    console.log(d)
   }
   else {
     alert("Unknown message type: " + d.msg_type);
