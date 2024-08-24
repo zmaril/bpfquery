@@ -158,7 +158,7 @@ async fn main() -> std::io::Result<()> {
         start_tui();
     }
     else {
-        start_server().await;
+        start_server(args.hostname).await;
     }
     return Ok(());
 }

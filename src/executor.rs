@@ -1,9 +1,8 @@
 use openssh::{KnownHosts, Session, Stdio};
-use std::collections::HashMap;
-use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::select;
-use tokio::sync::watch;
 use serde_json::Value;
+use std::collections::HashMap;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::sync::watch;
 
 pub async fn execute_bpf(
     hostname: String,
@@ -36,8 +35,7 @@ pub async fn execute_bpf(
     let mut rows = [].to_vec();
 
     loop {
-        // check if there are any errors but do not block
-        select! {
+        tokio::select! {
         error = errors.next_line() => match error {
             Ok(Some(line)) => {
                     rows = [[Value::String(line)].to_vec()].to_vec();
@@ -98,7 +96,14 @@ pub async fn execute_bpf(
                         row.push(value.clone());
                     }
                     rows.push(row);
-                    results_sender.send(rows.clone()).unwrap();
+                    let result = results_sender.send(rows.clone());
+                    match result {
+                        Ok(_) => {}
+                        Err(e) => {
+                            println!("Error sending results: {:#?}", e);
+                            break;
+                        }
+                    }
                 }
                 Ok(None) => {
                     results_sender.send([[Value::String("Done".to_string())].to_vec()].to_vec()).unwrap();
