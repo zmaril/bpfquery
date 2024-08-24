@@ -1,36 +1,50 @@
 import perspective from "https://cdn.jsdelivr.net/npm/@finos/perspective@3.0.0/dist/cdn/perspective.js";
 import * as monaco from "https://cdn.jsdelivr.net/npm/monaco-editor@0.51.0/+esm";
 
-const chat = document.getElementById("chat");
-const text = document.getElementById("text");
-const uri = "ws://" + location.host + "/chat";
+const uri = "ws://" + location.host + "/bpfquery";
 const ws = new WebSocket(uri);
 
-function message(data) {
-  const line = document.createElement("p");
-  line.innerText = data;
-  chat.appendChild(line);
-}
+// const chat = document.getElementById("chat");
+// const text = document.getElementById("text");
 
-ws.onopen = function () {
-  chat.innerHTML = "<p><em>Connected!</em></p>";
-};
+// function message(data) {
+//   const line = document.createElement("p");
+//   line.innerText = data;
+//   chat.appendChild(line);
+// }
 
-ws.onmessage = function (msg) {
-  message(msg.data);
-};
+// ws.onopen = function () {
+//   chat.innerHTML = "<p><em>Connected!</em></p>";
+// };
 
-ws.onclose = function () {
-  chat.getElementsByTagName("em")[0].innerText = "Disconnected!";
-};
+// ws.onmessage = function (msg) {
+//   message(msg.data);
+// };
 
-send.onclick = function () {
-  const msg = text.value;
-  ws.send(msg);
-  text.value = "";
+// ws.onclose = function () {
+//   chat.getElementsByTagName("em")[0].innerText = "Disconnected!";
+// };
 
-  message("<You>: " + msg);
-};
+// send.onclick = function () {
+//   const msg = text.value;
+//   ws.send(msg);
+//   text.value = "";
+
+//   message("<You>: " + msg);
+// };
+
+console.log("here");
+monaco.editor.create(document.getElementById("editor"), {
+  value: `select
+    str(args.path -> dentry -> d_name.name)
+from
+    kprobe.vfs_open;
+
+`,
+  language: "sql",
+  overviewRulerLanes: 0, // This turns off the overview ruler
+  minimap: { enabled: false }, // This turns off the minimap if desired
+});
 
 const worker = await perspective.worker();
 const resp = await fetch(
@@ -42,9 +56,4 @@ const table = worker.table(arrow);
 viewer.load(table);
 viewer.restore({ settings: true, plugin_config: { edit_mode: "EDIT" } });
 
-monaco.editor.create(document.getElementById("editor"), {
-  value: `function helloWorld() {
-console.log('Hello, world!');
-}`,
-  language: "javascript",
-});
+hljs.highlightAll();

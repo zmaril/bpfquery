@@ -58,7 +58,7 @@ async fn eval_print_string(hostname: String, s: String) -> std::io::Result<()> {
     let (results_sender, results_reciver) = tokio::sync::watch::channel([].to_vec());
     dbg!(&headers);
     println!("{}", &bpf);
-    let t = tokio::task::spawn(async {
+    tokio::task::spawn(async {
         executor::execute_bpf(hostname, headers, bpf, results_sender).await;
     });
 
@@ -74,8 +74,8 @@ async fn eval_print_string(hostname: String, s: String) -> std::io::Result<()> {
                     break;
                 }
                 else if !data.is_empty() && data[data.len()-1].len() == 1 && data[data.len()-1][0] == "DONE" {
-                    for i in 0..data.len()-1 {
-                        println!("{}", data[i][1..].into_iter().map(|x| x.to_string()).collect::<Vec<String>>().
+                    for d in data {
+                        println!("{}", d[1..].iter().map(|x| x.to_string()).collect::<Vec<String>>().
 
                             join(", "));
                     }
@@ -93,7 +93,7 @@ async fn read_and_run(filename: String, hostname: String) {
     let mut file = std::fs::File::open(&filename).unwrap();
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
-    eval_print_string(hostname.clone(), contents.clone()).await;
+    eval_print_string(hostname.clone(), contents.clone()).await.unwrap();
 }
 async fn watch_and_run_file(hostname: String, filename: String) -> std::io::Result<()> {
     let mut file_contents = std::fs::read_to_string(&filename).unwrap();
@@ -142,7 +142,7 @@ fn start_tui() {
 
     init_panic_hook();
     let mut terminal = tui::init().unwrap();
-    let app_result = app.run(&mut terminal);
+    let _app_result = app.run(&mut terminal);
     tui::restore().unwrap();
 }
 

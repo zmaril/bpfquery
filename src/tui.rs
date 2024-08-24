@@ -137,7 +137,7 @@ impl App {
                 }
             } else {
                 self.bpfoutput = "Error compiling sql:\n".to_string();
-                self.bpfoutput.push_str(&r.unwrap_err());
+                self.bpfoutput.push_str(r.unwrap_err());
             }
         } else {
             self.bpfoutput = "Error parsing sql\n".to_string();

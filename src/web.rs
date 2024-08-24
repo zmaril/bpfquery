@@ -6,7 +6,6 @@ use std::sync::{
 };
 
 use futures_util::{SinkExt, StreamExt, TryFutureExt};
-use tokio::io::AsyncReadExt;
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
@@ -31,7 +30,7 @@ pub async fn start_server() {
     let users = warp::any().map(move || users.clone());
 
     // GET /chat -> websocket upgrade
-    let chat = warp::path("chat")
+    let chat = warp::path("bpfquery")
         // The `ws()` filter will prepare Websocket handshake...
         .and(warp::ws())
         .and(users)

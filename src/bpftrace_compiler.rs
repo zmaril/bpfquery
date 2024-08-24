@@ -28,7 +28,7 @@ fn get_struct_for_arg(function_name: &String, arg_name: &String) -> String {
     format!("(({})arg{})", structs, index)
 }
 
-fn resolve_compound_identifier(cs: &Vec<Ident>, relation: &String) -> String {
+fn resolve_compound_identifier(cs: &[Ident], relation: &str) -> String {
     // if the first ident is args, then we do a lookup in the database for 
     
     //only do this for kprobes for now
@@ -108,7 +108,7 @@ fn parse_expr(e: &Expr, relation: &String) -> String {
                     format!("{}({})", fns, fargs)
                 }
                 FunctionArguments::None => format!("{}()", fns),
-                FunctionArguments::Subquery(q) => panic!("Subquery not supported"),
+                FunctionArguments::Subquery(_) => panic!("Subquery not supported"),
             }
         }
         Expr::CompoundIdentifier(c) => resolve_compound_identifier(c, relation),
@@ -184,7 +184,7 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
                 headers.push(alias.value.clone());
                 outputs.push(parse_expr(expr, &probe_name));
             }
-            SelectItem::Wildcard(w) => {
+            SelectItem::Wildcard(_) => {
                 let opts = ["comm", "pid", "cpu", "elapsed"];
                 for opt in opts.iter() {
                     headers.push(opt.to_string());
