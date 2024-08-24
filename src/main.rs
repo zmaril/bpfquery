@@ -2,12 +2,14 @@ mod bpftrace_compiler;
 mod executor;
 mod parser;
 mod tui;
-use std::path::Path;
+mod web;
+
 use std::{
     io::Read,
     panic::{set_hook, take_hook},
 };
 use tui_textarea::TextArea;
+use web::start_server;
 
 use clap::Parser;
 
@@ -29,6 +31,10 @@ struct Args {
     //-f to evaluate a file
     #[clap(short, long)]
     file: Option<String>,
+
+    //-t to run the tui
+    #[clap(short, long)]
+    tui: Option<bool>,
 }
 
 pub fn init_panic_hook() {
@@ -148,8 +154,11 @@ async fn main() -> std::io::Result<()> {
         eval_print_string(args.hostname, args.expression.unwrap()).await?;
     } else if args.file.is_some() {
         watch_and_run_file(args.hostname, args.file.unwrap()).await?;
-    } else {
+    } else if args.tui.is_some() {
         start_tui();
+    }
+    else {
+        start_server().await;
     }
     return Ok(());
 }

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>Warp Chat</title>
+    <script
+      type="module"
+      src="https://cdn.jsdelivr.net/npm/@finos/perspective/dist/cdn/perspective.js"
+    ></script>
+    <script
+      type="module"
+      src="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer/dist/cdn/perspective-viewer.js"
+    ></script>
+    <script
+      type="module"
+      src="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-datagrid/dist/cdn/perspective-viewer-datagrid.js"
+    ></script>
+    <script
+      type="module"
+      src="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer-d3fc/dist/cdn/perspective-viewer-d3fc.js"
+    ></script>
+
+    <script type="module">
+      import monacoEditor from "https://cdn.jsdelivr.net/npm/monaco-editor@0.51.0/+esm";
+    </script>
+
+    <link
+      rel="stylesheet"
+      crossorigin="anonymous"
+      href="https://cdn.jsdelivr.net/npm/@finos/perspective-viewer/dist/css/pro.css"
+    />
+
+    <style>
+      perspective-viewer {
+        position: absolute;
+        width: 50%;
+        top: 0;
+        left: 50%;
+        bottom: 0;
+        right: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Warp chat</h1>
+
+    <div id="editor" style="width:800px;height:600px;border:1px solid #ccc;">
+      <input type="text" id="text" />
+      <button type="button" id="send">Send</button>
+      <div id="chat">
+        <p><em>Connecting...</em></p>
+      </div>
+    </div>
+
+    <perspective-viewer></perspective-viewer>
+    <script type="module" src="/page.js"></script>
+  </body>
+</html>
