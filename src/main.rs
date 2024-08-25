@@ -1,14 +1,9 @@
 mod bpftrace_compiler;
 mod executor;
 mod parser;
-mod tui;
 mod web;
 
-use std::{
-    io::Read,
-    panic::{set_hook, take_hook},
-};
-use tui_textarea::TextArea;
+use std::io::Read;
 use web::start_server;
 
 use clap::Parser;
@@ -31,19 +26,6 @@ struct Args {
     //-f to evaluate a file
     #[clap(short, long)]
     file: Option<String>,
-
-    //-t to run the tui
-    #[clap(short, long)]
-    tui: Option<bool>,
-}
-
-pub fn init_panic_hook() {
-    let original_hook = take_hook();
-    set_hook(Box::new(move |panic_info| {
-        // intentionally ignore errors here since we're already in a panic
-        let _ = tui::restore();
-        original_hook(panic_info);
-    }));
 }
 
 async fn eval_print_string(hostname: String, s: String) -> std::io::Result<()> {
@@ -124,28 +106,6 @@ async fn watch_and_run_file(hostname: String, filename: String) -> std::io::Resu
     Ok(())
 }
 
-fn start_tui() {
-    let textarea =
-        TextArea::from(["select str(args.path->dentry->d_name.name) from kprobe.vfs_open"]);
-
-    let mut app = tui::App {
-        exit: false,
-        counter: 0,
-        hostname: "localhost".to_string(),
-        textarea,
-        bpfoutput: String::new(),
-        headers: Vec::new(),
-        results: [].to_vec(),
-        results_sender: tokio::sync::watch::channel([].to_vec()).0,
-        task: tokio::task::spawn(async {}),
-    };
-
-    init_panic_hook();
-    let mut terminal = tui::init().unwrap();
-    let _app_result = app.run(&mut terminal);
-    tui::restore().unwrap();
-}
-
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
@@ -154,8 +114,6 @@ async fn main() -> std::io::Result<()> {
         eval_print_string(args.hostname, args.expression.unwrap()).await?;
     } else if args.file.is_some() {
         watch_and_run_file(args.hostname, args.file.unwrap()).await?;
-    } else if args.tui.is_some() {
-        start_tui();
     }
     else {
         start_server(args.hostname).await;

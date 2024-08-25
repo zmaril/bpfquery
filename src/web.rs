@@ -130,7 +130,7 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
     // this specific user's connection.
 
     let sql = "select
-      str(args.path -> dentry -> d_name.name)
+      str(args.path -> dentry -> d_name.name) as filename
   from
       kprobe.vfs_open;"
         .to_string();
@@ -194,7 +194,7 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
                 let data = results_reciver.borrow().clone();
                 if data.len() == 1 && data[0].len() == 1 {
                     println!("{}", data[0][0]);
-                    break;
+                    //break;
                 }
                 else if !data.is_empty() && data[data.len()-1].len() == 1 && data[data.len()-1][0] == "DONE" {
                     for d in data {
@@ -205,6 +205,7 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
                     break;
                 }
                 if let Some(tx) = users.read().await.get(&my_id) {
+                    dbg!("response: {:?}", &data);
                     let response = ResponseMessage {
                         data: ResponseData::Results(BpftraceResults { results: data }),
                         msg_type: "bpftrace_results".to_string(),
@@ -239,11 +240,20 @@ async fn user_message(my_id: usize, msg: Message, users: &Users) -> Option<Respo
     let result = parse_bpfquery_sql(msg);
     let response = match result {
         Ok(ast) => {
-            let (output, headers) = compile_ast_to_bpftrace(ast).unwrap();
-            // convert to json
-            ResponseMessage {
-                data: ResponseData::Output(BpftraceOutputMsg { output, headers }),
-                msg_type: "bpftrace_output".to_string(),
+            let result2 = compile_ast_to_bpftrace(ast);
+            match result2 {
+                Ok((output, headers)) => {
+                    ResponseMessage {
+                        data: ResponseData::Output(BpftraceOutputMsg { output, headers }),
+                        msg_type: "bpftrace_output".to_string(),
+                    }
+                }
+                Err(e) => ResponseMessage {
+                    data: ResponseData::Error(BpftraceErrorMsg {
+                        error_message: e.to_string(),
+                    }),
+                    msg_type: "bpftrace_error".to_string(),
+                },
             }
         }
         Err(e) => ResponseMessage {

@@ -6,7 +6,7 @@ const ws = new WebSocket(uri);
 
 editor = monaco.editor.create(document.getElementById("editor"), {
   value: `select
-      str(args.path -> dentry -> d_name.name)
+      str(args.path -> dentry -> d_name.name) as filename
   from
       kprobe.vfs_open;
   `,
@@ -27,16 +27,47 @@ ws.onopen = function () {
 
 var headers = [];
 
-ws.onmessage = function (msg) {
+var worker; 
+var table; 
+var elem;
+
+
+let first_load = false;
+
+async function reload_perspective() {
+  first_load = true;
+  worker = await perspective.worker();
+    elem = document.getElementsByTagName("perspective-viewer")[0];
+    table = await worker.table([{"Loading": "Data"}], {});
+    await elem.load(table);
+    elem.restore({
+      plugin: "Datagrid",
+      plugin_config: {
+          editable: false,
+          scroll_lock: true,
+      },
+      settings: false,
+      theme: "Pro Light",
+      filter: [],
+  });
+}
+
+ws.onmessage = async function (msg) {
   let bpfv = document.getElementById("bpftrace-viewer");
   let d = JSON.parse(msg.data);
-  console.log(d.msg_type);
+  if (worker === undefined) {
+    // first message, start up 
+    await reload_perspective();
+  }
 
   if (d.msg_type == "bpftrace_output") {
     bpfv.innerText = d.output;
-    headers = d.headers;
+    headers = ["id"];
+    headers = headers.concat(d.headers);
     bpfv.classList.add("bg-gray-200");
     bpfv.classList.remove("bg-red-200");
+    await reload_perspective();
+
   } else if (d.msg_type == "bpftrace_error") {
     console.log("huh")
     bpfv.innerText = d.error_message;
@@ -44,43 +75,33 @@ ws.onmessage = function (msg) {
     bpfv.classList.remove("bg-gray-200");
   }
   else if (d.msg_type == "bpftrace_results") {
+    if (d.results.length == 0 ) {
+      return;
+    }
     console.log(d)
+    // transform results into a perspective table
+    let data = d.results.map((row) => {
+      let obj = {};
+      for (let i = 0; i < headers.length; i++) {
+        obj[headers[i]] = row[i];
+      }
+      return obj;
+    });
+    if (first_load) {
+      table = await worker.table(data, {index: "id"});
+      elem.load(table);
+      first_load = false;
+    }
+    else {
+      table.replace(data);
+    }
   }
   else {
     alert("Unknown message type: " + d.msg_type);
   }
-
-  //unset data-highlighted on this eleent
-  //document.getElementById("bpftrace-viewer").removeAttribute("data-highlighted");
-  //hljs.highlightAll();
 };
 
 editor.getModel().onDidChangeContent((event) => {
   sendSql();
 });
 
-// ws.onmessage = function (msg) {
-//   message(msg.data);
-// };
-
-// ws.onclose = function () {
-//   chat.getElementsByTagName("em")[0].innerText = "Disconnected!";
-// };
-
-// send.onclick = function () {
-//   const msg = text.value;
-//   ws.send(msg);
-//   text.value = "";
-
-//   message("<You>: " + msg);
-// };
-
-const worker = await perspective.worker();
-const resp = await fetch(
-  "https://cdn.jsdelivr.net/npm/superstore-arrow/superstore.lz4.arrow"
-);
-const arrow = await resp.arrayBuffer();
-const viewer = document.getElementsByTagName("perspective-viewer")[0];
-const table = worker.table(arrow);
-viewer.load(table);
-viewer.restore({ settings: true, plugin_config: { edit_mode: "EDIT" } });
