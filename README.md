@@ -6,7 +6,7 @@ An experiment with compiling SQL to BPF(trace) programs.
 git clone git@github.com:zmaril/bpfquery.git
 cd bpfquery
 cargo run devserver #some linux server you have ssh access to that has bpftrace installed on it 
-# watch as bpftrace sends info back about things
+# open up localhost:3030
 ```
 <a href="https://asciinema.org/a/672845" target="_blank"><img src="https://asciinema.org/a/672845.svg" /></a>
 
@@ -25,12 +25,6 @@ select * from kprobe.do_nanosleep where pid > 2*1000
 SELECT tumble(interval '10 seconds') as bucket, count(*) FROM kprobe.do_nanosleep GROUP BY bucket;
 ```
 
-# Design/Roadmap 
-
-Right now bpfquery is (sort of) working. It's got a TUI and CLI that (sort of works), a sql to bpftrace compiler that (sort of) works, and an executor that (sort of) works. What's next up is removing those (sort of) qualifiers and making it just work. 
-
-The main focus right now is expanding the SQL to BPF compiler to handle more SQL queries, with incidental improvements to the UI and executor as needed. Joins don't work, only the builtin bpftrace arguments like pid and comm are supported, and there's no streaming semantics yet. So figuring out how to make those work is the next step. Much later on, after I've nailed down the semantics of the language, I'd like to make it so that the backend can be switched out for other BPF backends like libbpf or bcc. But there's a lot of experimentation to do before that happens.
-
 # Related Work
 
 * [bpftrace](https://github.com/bpftrace/bpftrace)
@@ -45,30 +39,29 @@ The main focus right now is expanding the SQL to BPF compiler to handle more SQL
 * [x] TUI - there's a cool TUI that let's you type in sql queries, see the bpftrace output, and then streams the results from whichever server you're targeting.
 * [x] CLI - you can use '-e' to run a query on a server.
 * [x] Execution - bpfquery can run a query on a server and get the results back.
+* [x] There's a sick webpage that works really well and is super cool. 
 
 
 # Zack's Todo's 
 Ordered roughly by what I want to do next.
 
-* [ ] Explore streaming joins across tables.
-* [ ] Explore streaming semantics with UDF window like arroyo.dev
-* [ ] Explore putting charts in the TUI and seeing if that's useful.
-* [ ] Typing in the TUI is slow sometimes and hangs, unsure why.
+* [ ] Redo the data layout so that it's better more amendable to aggregation and streaming semanitcs. 
+* [ ] Implement aggregation and streaming semantics.
+* [ ] Make it so that the results are sent incrementally instead of all at once.
+* [ ] Examples built in 
+* [ ] Typeahead in the web interface both for the probes as well as the arguments 
+* [ ] Use vmlinux.h to get the types of the arguments to the probes so we don't have to use -> anymore or str.  
+* [ ] Have the linux kernel defs just be a big json somehow? An api endpoint for looking up defs? 
+* [ ] Struct/bpf tree explorer/explainer in web interface 
+* [ ] Write out docs 
+* [ ] Write out some tests
+* [ ] Mess around with `seluect pid from kprobe.STAR`
 * [ ] Type checking and hints, see first problem query below. 
-* [ ] Try out other probes besides kprobe
-* [ ] Figure out how bpftrace name star will work, i.e. `select pid from kprobe.*` equivalent.
-* [ ] Experiment with static table access, like looking things up about the os before hand in a table. 
-* [ ] Experiment with args from `tracepoint`, `kfunc`, and `uprobe` 
-* [ ] Write some tests, starting to get tough to keep track of what works and what doesn't. 
-* [ ] Set up CI pipelines with releases 
-* [ ] Make the TUI sections (table, editor) all scrollable 
-* [ ] Expand the TUI to have like menus and stuff.
-* [ ] Put some examples into the TUI premade for people to try out 
-* [ ] Have a bpf struct and bpftrace probe tree explorer/explainer so people can see what's available to them.
-* [ ] Use the output of vmlinux.h and bpftrace.lv.txt somehow to make the bpftrace program more robust, combined with static type checking or something, but also just knowing ahead of time whether a tracepoint exists 
-* [ ] Write some docs about how to use everything, what can be expected to work. 
-* [ ] Implement a LSP that uses the ctag definitions somehow.
-* [ ] Have linux kerenl defs just be a big json
+
+
+# Zack's Not Yets 
+
+* [ ] Compiling down to bpf programs directly - hard and I want to get the semantics of sql right first, before trying to do this.
 
 # Motivation
 
