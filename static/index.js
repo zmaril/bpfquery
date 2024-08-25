@@ -59,6 +59,8 @@ async function reload_perspective() {
 }
 
 ws.onmessage = async function (msg) {
+  //check if editor has focus
+  let focused = editor.hasTextFocus();
   let bpfv = document.getElementById("bpftrace-viewer");
   let d = JSON.parse(msg.data);
   if (worker === undefined) {
@@ -75,7 +77,6 @@ ws.onmessage = async function (msg) {
     await reload_perspective();
 
   } else if (d.msg_type == "bpftrace_error") {
-    console.log("huh")
     bpfv.innerText = d.error_message;
     bpfv.classList.add("bg-red-200");
     bpfv.classList.remove("bg-gray-200");
@@ -84,7 +85,6 @@ ws.onmessage = async function (msg) {
     if (d.results.length == 0 ) {
       return;
     }
-    console.log(d)
     // transform results into a perspective table
     let data = d.results.map((row) => {
       let obj = {};
@@ -104,6 +104,10 @@ ws.onmessage = async function (msg) {
   }
   else {
     alert("Unknown message type: " + d.msg_type);
+  }
+
+  if (focused) {
+    editor.focus();
   }
 };
 

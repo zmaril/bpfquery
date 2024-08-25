@@ -1,5 +1,5 @@
 use home::env;
-use openssh::{KnownHosts, Session, Stdio};
+use openssh::{KnownHosts, Session, SessionBuilder, Stdio};
 use serde_json::Value;
 use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -122,12 +122,16 @@ pub async fn execute_bpf_remotely(
     results_sender: watch::Sender<Vec<Vec<Value>>>,
 ) {
     let mut h = hostname.clone();
+    let mut s = SessionBuilder::default();
     if hostname == "bpftrace_machine" {
         h = std::env::var("BPFTRACE_MACHINE").unwrap();
         let user = "root".to_string();
         h = format!("{}@{}", user, h);
+        s.keyfile("/app/bpftrace_machine");
     }
-    let session = Session::connect(h, KnownHosts::Strict).await.unwrap();
+    s.known_hosts_check(KnownHosts::Accept);
+
+    let session = s.connect(h).await.unwrap();
 
     let mut remote_cmd = session.command("bpftrace");
     remote_cmd.arg("-f");

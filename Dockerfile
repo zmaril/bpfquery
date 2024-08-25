@@ -13,8 +13,6 @@ RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --bin bpfquery
 
-
-
 # We do not need the Rust toolchain to run the binary!
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
@@ -22,8 +20,4 @@ COPY --from=builder /app/target/release/bpfquery /usr/local/bin
 COPY --from=builder /app/static ./static
 COPY --from=builder /app/fly_linux_kernel_definitions.db linux_kernel_definitions.db
 COPY --from=builder /app/bpftrace_machine bpftrace_machine
-RUN ssh-add bpftrace_machine
-RUN apt-get update 
-RUN apt-get install -y bpftrace 
-RUN apt-get install -y linux-headers-generic
-ENTRYPOINT ["/usr/local/bin/bpfquery", "localhost"]
+ENTRYPOINT ["/usr/local/bin/bpfquery", "bpftrace_machine"]
