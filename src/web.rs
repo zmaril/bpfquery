@@ -79,20 +79,12 @@ pub async fn start_server(hostname: String) {
             ws.on_upgrade(move |socket| user_connected(h, socket, users))
         });
 
-    // GET / -> index html
-    let index = warp::path::end().map(|| {
-        let s = std::fs::read_to_string("src/page.html").unwrap();
-        warp::reply::html(s)
-    });
 
-    let js = warp::path("page.js").map(|| {
-        let s = std::fs::read_to_string("src/page.js").unwrap();
-        warp::reply::with_header(s, "content-type", "text/javascript")
-    });
+    let static_files = warp::fs::dir("static");
 
-    let routes = index.or(editor).or(js);
+    let routes = static_files.or(editor);
 
-    warp::serve(routes).run(([127, 0, 0, 1], 3030)).await;
+    warp::serve(routes).run(([0, 0, 0, 0], 3030)).await;
     let metrics = Handle::current().metrics();
     dbg!(metrics.num_workers());
     dbg!(metrics.num_alive_tasks());

@@ -5,6 +5,7 @@ mod web;
 
 use std::io::Read;
 use web::start_server;
+use dotenv::dotenv;
 
 use clap::Parser;
 
@@ -109,6 +110,7 @@ async fn watch_and_run_file(hostname: String, filename: String) -> std::io::Resu
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
+    dotenv().ok();
 
     if args.expression.is_some() {
         eval_print_string(args.hostname, args.expression.unwrap()).await?;
