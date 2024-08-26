@@ -115,3 +115,18 @@ editor.getModel().onDidChangeContent((event) => {
   sendSql();
 });
 
+
+monaco.languages.registerCompletionItemProvider('sql', {
+  provideCompletionItems: (model, position) => {
+      // const suggestions = keywords.map(keyword => ({
+      //     label: keyword,
+      //     kind: monaco.languages.CompletionItemKind.Keyword,
+      //     insertText: keyword
+      // }));
+      console.log(model);
+      console.log(position);
+      console.log(model.getWordUntilPosition(position));
+
+      return { suggestions: [] };
+  }
+});

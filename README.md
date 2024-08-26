@@ -57,6 +57,7 @@ Ordered roughly by what I want to do next.
 * [ ] Write out some tests
 * [ ] Mess around with `seluect pid from kprobe.STAR`
 * [ ] Type checking and hints, see first problem query below. 
+* [ ] get the domain working right.
 
 
 # Zack's Not Yets 
