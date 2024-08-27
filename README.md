@@ -1,6 +1,6 @@
 # bpfquery
 
-An experiment with compiling SQL to BPF(trace) programs. 
+An experiment with compiling SQL to BPF(trace) programs. Exploring what's possible. 
 
 ```bash
 git clone git@github.com:zmaril/bpfquery.git
@@ -36,8 +36,6 @@ SELECT tumble(interval '10 seconds') as bucket, count(*) FROM kprobe.do_nanoslee
 * [x] Expressions - a lot of expressions just work so far, but there's a lot of edge cases to handle to as they come up, but the expectation is that something like `select pid + 1 from kprobe.do_nanosleep` should work.
 * [x] Predicates/filtering/`where` - `where` clauses get parsed and compiled into predicates and often work. `select * from kprobe.do_nanosleep where pid > 1000` should work fine.
 * [x] bpftrace builtin arguments - things like `pid`, `comm`, `cpu`, `elapsed` work well, they are more or less just passed through to the bpftrace program as is. 
-* [x] TUI - there's a cool TUI that let's you type in sql queries, see the bpftrace output, and then streams the results from whichever server you're targeting.
-* [x] CLI - you can use '-e' to run a query on a server.
 * [x] Execution - bpfquery can run a query on a server and get the results back.
 * [x] There's a sick webpage that works really well and is super cool. 
 
@@ -53,8 +51,8 @@ Ordered roughly by what I want to do next.
 * [ ] Use vmlinux.h to get the types of the arguments to the probes so we don't have to use -> anymore or str.  
 * [ ] Have the linux kernel defs just be a big json somehow? An api endpoint for looking up defs? 
 * [ ] Struct/bpf tree explorer/explainer in web interface 
-* [ ] Write out docs 
-* [ ] Write out some tests
+* [ ] Write out docs. 
+* [ ] Write out some tests,
 * [ ] Mess around with `seluect pid from kprobe.STAR`
 * [ ] Type checking and hints, see first problem query below. 
 * [ ] get the domain working right.

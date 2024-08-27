@@ -17,7 +17,6 @@ use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::ws::{Message, WebSocket};
 use warp::Filter;
 
-
 #[derive(Serialize, Clone)]
 struct BpftraceOutputMsg {
     output: String,
@@ -31,7 +30,7 @@ struct BpftraceErrorMsg {
 
 #[derive(Serialize, Clone)]
 struct BpftraceResults {
-    results: Vec<Vec<serde_json::Value>>,
+    results: Vec<serde_json::Value>,
 }
 
 #[derive(Serialize, Clone)]
@@ -79,7 +78,6 @@ pub async fn start_server(hostname: String) {
             ws.on_upgrade(move |socket| user_connected(h, socket, users))
         });
 
-
     let static_files = warp::fs::dir("static");
 
     let routes = static_files.or(editor);
@@ -106,12 +104,17 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
 
     let tt = tokio::task::spawn(async move {
         while let Some(message) = rx.next().await {
+            let mut broken = false;
             user_ws_tx
                 .send(message)
                 .unwrap_or_else(|e| {
                     eprintln!("websocket send error: {}", e);
+                    broken = true;
                 })
                 .await;
+            if broken {
+                break;
+            }
         }
     });
 
@@ -128,7 +131,7 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
         .to_string();
     let ast = parse_bpfquery_sql(&sql).unwrap();
     let (mut output, mut headers) = compile_ast_to_bpftrace(ast).unwrap();
-    let (mut results_sender, mut results_reciver) = tokio::sync::watch::channel([].to_vec());
+    let (mut results_sender, mut results_reciver) = tokio::sync::broadcast::channel(10000);
     let h = hostname.clone();
     let hds = headers.clone();
     let ot = output.clone();
@@ -170,7 +173,7 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
                       if new_output != output || new_headers != headers {
                           output = new_output;
                           headers = new_headers;
-                          (results_sender, results_reciver) = tokio::sync::watch::channel([].to_vec());
+                          (results_sender, results_reciver) = tokio::sync::broadcast::channel(10000);
                           t.abort();
                           let h = hostname.clone();
                           let hds = headers.clone();
@@ -182,31 +185,23 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
                   }
               }
           }
-            _ = tokio::time::sleep(tokio::time::Duration::from_secs(1)) => {
-                let data = results_reciver.borrow().clone();
-                if data.len() == 1 && data[0].len() == 1 {
-                    println!("{}", data[0][0]);
-                    //break;
-                }
-                else if !data.is_empty() && data[data.len()-1].len() == 1 && data[data.len()-1][0] == "DONE" {
-                    for d in data {
-                        println!("{}", d[1..].iter().map(|x| x.to_string()).collect::<Vec<String>>().
-
-                            join(", "));
-                    }
-                    break;
-                }
-                if let Some(tx) = users.read().await.get(&my_id) {
-                    dbg!("response: {:?}", &data);
-                    let response = ResponseMessage {
-                        data: ResponseData::Results(BpftraceResults { results: data }),
-                        msg_type: "bpftrace_results".to_string(),
-                    };
-                    let response_string = serde_json::to_string(&response).unwrap();
-                    if let Err(_disconnected) = tx.send(Message::text(response_string.clone())) {
-                        println!("error sending message to user: {}", my_id);
-                    }
-                }
+          data = results_reciver.recv() => {
+              if let Ok(data) = data {
+                  if !data.is_empty() && data[0] == "DONE" {
+                      break;
+                  }
+                  if let Some(tx) = users.read().await.get(&my_id) {
+                      let response = ResponseMessage {
+                          data: ResponseData::Results(BpftraceResults { results: data }),
+                          msg_type: "bpftrace_results".to_string(),
+                      };
+                      let response_string = serde_json::to_string(&response).unwrap();
+                      if let Err(_disconnected) = tx.send(Message::text(response_string.clone())) {
+                          println!("error sending message to user: {}", my_id);
+                          break;
+                      }
+                  }
+              }
             }
         }
     }
@@ -217,7 +212,6 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
     user_disconnected(my_id, &users).await;
 }
 
-
 async fn user_message(my_id: usize, msg: Message, users: &Users) -> Option<ResponseMessage> {
     // Skip any non-Text messages...
     let msg = if let Ok(s) = msg.to_str() {
@@ -226,20 +220,15 @@ async fn user_message(my_id: usize, msg: Message, users: &Users) -> Option<Respo
         return None;
     };
 
-    let new_msg = format!("<User#{}>: {}", my_id, msg);
-    dbg!("new_msg: {}", &new_msg);
-
     let result = parse_bpfquery_sql(msg);
     let response = match result {
         Ok(ast) => {
             let result2 = compile_ast_to_bpftrace(ast);
             match result2 {
-                Ok((output, headers)) => {
-                    ResponseMessage {
-                        data: ResponseData::Output(BpftraceOutputMsg { output, headers }),
-                        msg_type: "bpftrace_output".to_string(),
-                    }
-                }
+                Ok((output, headers)) => ResponseMessage {
+                    data: ResponseData::Output(BpftraceOutputMsg { output, headers }),
+                    msg_type: "bpftrace_output".to_string(),
+                },
                 Err(e) => ResponseMessage {
                     data: ResponseData::Error(BpftraceErrorMsg {
                         error_message: e.to_string(),

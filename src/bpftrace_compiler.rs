@@ -61,7 +61,7 @@ fn parse_fn_arg_expr(arg: &FunctionArgExpr, relation: &String ) -> String {
     match arg {
         FunctionArgExpr::Expr(e) => parse_expr(e, relation),
         FunctionArgExpr::Wildcard => "*".to_string(),
-        FunctionArgExpr::QualifiedWildcard(_o) => panic!("QualifiedWildcard not supported"),
+        FunctionArgExpr::QualifiedWildcard(_o) => "QualifiedWildcard not supported".to_string(),
     }
 }
 
@@ -108,11 +108,11 @@ fn parse_expr(e: &Expr, relation: &String) -> String {
                     format!("{}({})", fns, fargs)
                 }
                 FunctionArguments::None => format!("{}()", fns),
-                FunctionArguments::Subquery(_) => panic!("Subquery not supported"),
+                FunctionArguments::Subquery(_) => "Subquery not supported".to_string(),
             }
         }
         Expr::CompoundIdentifier(c) => resolve_compound_identifier(c, relation),
-        v => panic!("Unsupported expression: {:?}", v),
+        v => format!("Unsupported expression: {:?}", v),
     }
 }
 
@@ -143,7 +143,7 @@ pub fn compile_ast_to_bpftrace(ast: Vec<Statement>) -> Result<(String, Vec<Strin
             _ => return Err("Expected a table"),
         };
         //convert table name to probe name
-        name.to_string().replace(".", ":")
+        name.to_string().replace("STAR", "*").replace(".",":")
     };
 
     // compile the query into bpftrace

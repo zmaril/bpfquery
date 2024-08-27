@@ -85,11 +85,21 @@ Every result has the following:
 * No group by then @id = count() 
 * If group by, then group by results of columns, @id[...eval(columns)] = count()  more or less. 
 
+Group by results don't need to be saved. They are temporary and only result in the id more or less. 
+
+For windows, I think we want a count. We could just save all the intermediary results with @q1_inputs_v1[..eval(columns)] but that feels not so good. Can't clear anything out afterwards? 
+
+Events get streamed in. How are they held onto? 
+
+the id of the row is always the count of the function call 
+
+the id of the result is the group by 
 
 Stages 
 1. Find the id
     a. no group bys, it's just the count 
     b. if group by's, then it's the result of the group by being evaled 
+
 2.Find the inputs coming into the query  
 
 The groups don't have to relate to anything at all in the projections 
@@ -100,3 +110,7 @@ group_id?
 
 timestamp - 
 status 
+
+
+row_id = count() 
+group_id = row_id if no group by otherwise eval of group id 

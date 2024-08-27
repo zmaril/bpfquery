@@ -2,13 +2,13 @@ use openssh::{KnownHosts,  SessionBuilder, Stdio};
 use serde_json::Value;
 use std::collections::HashMap;
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::sync::watch;
+use tokio::sync::broadcast;
 
 pub async fn execute_bpf(
     hostname: String,
     headers: Vec<String>,
     bpf: String,
-    results_sender: watch::Sender<Vec<Vec<Value>>>,
+    results_sender: broadcast::Sender<Vec<Value>>,
 ) {
     let mut h = hostname.clone();
     let mut s = SessionBuilder::default();
@@ -40,14 +40,12 @@ pub async fn execute_bpf(
     let mut lines = stdout_reader.lines();
     let mut errors = stderr_reader.lines();
 
-    let mut rows = [].to_vec();
-
     loop {
         tokio::select! {
         error = errors.next_line() => match error {
             Ok(Some(line)) => {
-                    rows = [[Value::String(line)].to_vec()].to_vec();
-                    results_sender.send(rows.clone()).unwrap();
+                    let row = [Value::String(line)].to_vec();
+                    results_sender.send(row.clone()).unwrap();
                     break;
             }
             Ok(None) => break, // End of stream
@@ -64,13 +62,16 @@ pub async fn execute_bpf(
                         continue;
                     }
                     let v: serde_json::Value = serde_json::from_str(&line).unwrap();
+                    if v["type"] == "lost_events" {
+                        continue;
+                    }
                     if v["type"] == "attached_probes" {
                         continue;
                     }
                     if v["type"] == "map" {
                         //for now, this indicates the end of the query
-                        rows.push([Value::String("DONE".to_string())].to_vec());
-                        results_sender.send(rows).unwrap();
+                        let row = [Value::String("DONE".to_string())].to_vec();
+                        results_sender.send(row).unwrap();
                         break;
                     }
                     //convert array of key value pairs to dict
@@ -103,8 +104,7 @@ pub async fn execute_bpf(
                         let value = &d[header.as_str()];
                         row.push(value.clone());
                     }
-                    rows.push(row);
-                    let result = results_sender.send(rows.clone());
+                    let result = results_sender.send(row.clone());
                     match result {
                         Ok(_) => {}
                         Err(e) => {
@@ -114,7 +114,7 @@ pub async fn execute_bpf(
                     }
                 }
                 Ok(None) => {
-                    results_sender.send([[Value::String("Done".to_string())].to_vec()].to_vec()).unwrap();
+                    results_sender.send([Value::String("Done".to_string())].to_vec()).unwrap();
                 }, // End of stream
                 Err(e) => {
                     println!("Error reading line: {:?}", e);

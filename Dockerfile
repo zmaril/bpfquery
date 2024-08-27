@@ -16,6 +16,8 @@ RUN cargo build --release --bin bpfquery
 # We do not need the Rust toolchain to run the binary!
 FROM debian:bookworm-slim AS runtime
 WORKDIR /app
+RUN apt-get update 
+RUN apt-get install -y ssh
 COPY --from=builder /app/target/release/bpfquery /usr/local/bin
 COPY --from=builder /app/static ./static
 COPY --from=builder /app/fly_linux_kernel_definitions.db linux_kernel_definitions.db
