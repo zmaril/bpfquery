@@ -1,6 +1,7 @@
 # bpfquery
 
 An experiment with compiling SQL to BPF(trace) programs. Exploring what's possible. Running at [bpfquery.com](https://bpfquery.com/), though it will crash often on things.
+![Screenshot 2024-08-27 at 10 45 40 AM](https://github.com/user-attachments/assets/e5f79b54-d8f0-4511-901c-525052e4e2ad)
 
 ```bash
 git clone git@github.com:zmaril/bpfquery.git
