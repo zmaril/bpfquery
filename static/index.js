@@ -247,8 +247,6 @@ if (example) {
 let old_length = 0;
 let i = setInterval(async () => {
   if (rows.length > 0 && rows.length != old_length) {
-    console.log("updating table");
-    console.log(rows);
     await table.replace(rows);
     elem.load(table);
     old_length = rows.length;

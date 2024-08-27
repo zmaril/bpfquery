@@ -1,6 +1,6 @@
 # bpfquery
 
-An experiment with compiling SQL to BPF(trace) programs. Exploring what's possible. 
+An experiment with compiling SQL to BPF(trace) programs. Exploring what's possible. Running at [bpfquery.com](https://bpfquery.com/), though it will crash often on things.
 
 ```bash
 git clone git@github.com:zmaril/bpfquery.git
@@ -8,7 +8,6 @@ cd bpfquery
 cargo run devserver #some linux server you have ssh access to that has bpftrace installed on it 
 # open up localhost:3030
 ```
-<a href="https://asciinema.org/a/672845" target="_blank"><img src="https://asciinema.org/a/672845.svg" /></a>
 
 # Queries that work right now 
 ```sql
@@ -37,7 +36,7 @@ SELECT tumble(interval '10 seconds') as bucket, count(*) FROM kprobe.do_nanoslee
 * [x] Predicates/filtering/`where` - `where` clauses get parsed and compiled into predicates and often work. `select * from kprobe.do_nanosleep where pid > 1000` should work fine.
 * [x] bpftrace builtin arguments - things like `pid`, `comm`, `cpu`, `elapsed` work well, they are more or less just passed through to the bpftrace program as is. 
 * [x] Execution - bpfquery can run a query on a server and get the results back.
-* [x] There's a sick webpage that works really well and is super cool. 
+* [x] There's a sick webpage that works really well sometmies and is super cool. 
 
 
 # Zack's Todo's 
@@ -45,21 +44,12 @@ Ordered roughly by what I want to do next.
 
 * [ ] Redo the data layout so that it's better more amendable to aggregation and streaming semanitcs. 
 * [ ] Implement aggregation and streaming semantics.
-* [ ] Make it so that the results are sent incrementally instead of all at once.
-* [ ] Examples built in 
 * [ ] Typeahead in the web interface both for the probes as well as the arguments 
 * [ ] Use vmlinux.h to get the types of the arguments to the probes so we don't have to use -> anymore or str.  
 * [ ] Have the linux kernel defs just be a big json somehow? An api endpoint for looking up defs? 
 * [ ] Struct/bpf tree explorer/explainer in web interface 
-* [ ] Write out docs. 
-* [ ] Write out some tests,
-* [ ] Mess around with `seluect pid from kprobe.STAR`
 * [ ] Type checking and hints, see first problem query below. 
-* [ ] get the domain working right.
-
-
-# Zack's Not Yets 
-
+* [ ] More examples.
 * [ ] Compiling down to bpf programs directly - hard and I want to get the semantics of sql right first, before trying to do this.
 
 # Motivation
