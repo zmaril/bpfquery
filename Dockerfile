@@ -22,4 +22,4 @@ COPY --from=builder /app/target/release/bpfquery /usr/local/bin
 COPY --from=builder /app/static ./static
 COPY --from=builder /app/fly_linux_kernel_definitions.db linux_kernel_definitions.db
 COPY --from=builder /app/bpftrace_machine bpftrace_machine
-ENTRYPOINT ["/usr/local/bin/bpfquery", "bpftrace_machine"]
+ENTRYPOINT ["/usr/local/bin/bpfquery", "bpftrace_machine", "--demo"]
