@@ -247,8 +247,11 @@ if (example) {
 let old_length = 0;
 let i = setInterval(async () => {
   if (rows.length > 0 && rows.length != old_length) {
+    //let config = elem.config;
     await table.replace(rows);
     elem.load(table);
+    //elem.restore(config);
+
     old_length = rows.length;
   }
 }, 1000);

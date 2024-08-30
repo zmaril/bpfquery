@@ -9,6 +9,7 @@ pub async fn execute_bpf(
     headers: Vec<String>,
     bpf: String,
     results_sender: broadcast::Sender<Vec<Value>>,
+    demo: bool,
 ) {
     let mut h = hostname.clone();
     let mut s = SessionBuilder::default();
@@ -22,11 +23,24 @@ pub async fn execute_bpf(
 
     let session = s.connect(h).await.unwrap();
 
-    let mut remote_cmd = session.command("bpftrace");
-    remote_cmd.arg("-f");
-    remote_cmd.arg("json");
-    remote_cmd.arg("-e");
-    remote_cmd.arg(bpf);
+    let mut remote_cmd;
+    // only run this command for five seconds
+    if demo {
+        remote_cmd = session.command("timeout");
+        remote_cmd.arg("30s");
+        remote_cmd.arg("bpftrace");
+        remote_cmd.arg("-f");
+        remote_cmd.arg("json");
+        remote_cmd.arg("-e");
+        remote_cmd.arg(bpf);
+    } else {
+        remote_cmd = session.command("bpftrace");
+        remote_cmd.arg("-f");
+        remote_cmd.arg("json");
+        remote_cmd.arg("-e");
+        remote_cmd.arg(bpf);
+    }
+
     remote_cmd.stdout(Stdio::piped());
     remote_cmd.stderr(Stdio::piped());
 

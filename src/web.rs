@@ -57,7 +57,7 @@ static NEXT_USER_ID: AtomicUsize = AtomicUsize::new(1);
 /// - Value is a sender of `warp::ws::Message`
 type Users = Arc<RwLock<HashMap<usize, mpsc::UnboundedSender<Message>>>>;
 
-pub async fn start_server(hostname: String) {
+pub async fn start_server(hostname: String, demo: bool) {
     pretty_env_logger::init();
 
     // Keep track of all connected users, key is usize, value
@@ -75,7 +75,7 @@ pub async fn start_server(hostname: String) {
         .map(move |ws: warp::ws::Ws, users| {
             let h = hostname.clone();
             // This will call our function if the handshake succeeds.
-            ws.on_upgrade(move |socket| user_connected(h, socket, users))
+            ws.on_upgrade(move |socket| user_connected(h, socket, users, demo))
         });
 
     let static_files = warp::fs::dir("static");
@@ -88,7 +88,7 @@ pub async fn start_server(hostname: String) {
     dbg!(metrics.num_alive_tasks());
 }
 
-async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
+async fn user_connected(hostname: String, ws: WebSocket, users: Users, demo: bool) {
     // Use a counter to assign a new unique ID for this user.
     let my_id = NEXT_USER_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -135,8 +135,9 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
     let h = hostname.clone();
     let hds = headers.clone();
     let ot = output.clone();
-    let mut t = tokio::task::spawn(async {
-        execute_bpf(h, hds, ot, results_sender).await;
+    let d = demo.clone();
+    let mut t = tokio::task::spawn(async move {
+        execute_bpf(h, hds, ot, results_sender, d).await;
     });
 
     // Every time the user sends a message, broadcast it to
@@ -178,8 +179,9 @@ async fn user_connected(hostname: String, ws: WebSocket, users: Users) {
                           let h = hostname.clone();
                           let hds = headers.clone();
                           let ot = output.clone();
-                          t = tokio::task::spawn(async {
-                              execute_bpf(h, hds, ot, results_sender).await;
+                          let d = demo.clone();
+                          t = tokio::task::spawn(async move {
+                              execute_bpf(h, hds, ot, results_sender, d).await;
                           });
                       }
                   }

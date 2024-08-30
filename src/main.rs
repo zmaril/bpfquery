@@ -18,6 +18,8 @@ use clap::Parser;
 )]
 struct Args {
     hostname: String,
+    #[arg(short, long)]
+    demo: bool,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
@@ -25,6 +27,6 @@ async fn main() -> std::io::Result<()> {
     let args = Args::parse();
     dotenv().ok();
 
-    start_server(args.hostname).await;
+    start_server(args.hostname, args.demo).await;
     return Ok(());
 }
