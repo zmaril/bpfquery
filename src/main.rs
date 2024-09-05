@@ -1,10 +1,7 @@
-mod bpftrace_compiler;
-mod executor;
-mod parser;
-mod web;
+mod scratch;
 
-use web::start_server;
 use dotenv::dotenv;
+use scratch::go;
 
 use clap::Parser;
 
@@ -17,16 +14,16 @@ use clap::Parser;
     about = "An experiment with sql and bpf."
 )]
 struct Args {
-    hostname: String,
     #[arg(short, long)]
     demo: bool,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() -> std::io::Result<()> {
-    let args = Args::parse();
+    let _args = Args::parse();
     dotenv().ok();
 
-    start_server(args.hostname, args.demo).await;
+    go();
+
     return Ok(());
 }
