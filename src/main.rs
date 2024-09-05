@@ -23,7 +23,7 @@ async fn main() -> std::io::Result<()> {
     let _args = Args::parse();
     dotenv().ok();
 
-    go();
+    go().await;
 
     return Ok(());
 }

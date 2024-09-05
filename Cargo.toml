@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+rustyline = "14.0.0"
 sqlparser = {version= "0.50.0", features = ["serde", "visitor"]}
 sqlparser_derive = "0.2.2"
 openssh = "0.11.0"
@@ -19,4 +20,5 @@ pretty_env_logger = "0.5.0"
 serde = "1.0.209"
 dotenv = "0.15.0"
 whoami = "1.5.1"
+datafusion = "41.0.0"
 

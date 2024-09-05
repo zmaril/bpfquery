@@ -4,3 +4,4 @@ linux_kernel_definitions.db
 bpftrace_machine
 bpftrace_machine.pub
 .env
+history.txt
