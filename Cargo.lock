@@ -478,9 +478,11 @@ dependencies = [
 name = "bpfquery"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "clap",
  "datafusion",
  "dotenv",
+ "futures",
  "futures-util",
  "home",
  "openssh",

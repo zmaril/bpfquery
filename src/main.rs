@@ -1,7 +1,7 @@
 mod scratch;
 
 use dotenv::dotenv;
-use scratch::go;
+use scratch::{cli_eval, cli_repl};
 
 use clap::Parser;
 
@@ -16,14 +16,21 @@ use clap::Parser;
 struct Args {
     #[arg(short, long)]
     demo: bool,
+
+    #[arg(short, long)]
+    eval: Option<String>,
 }
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() -> std::io::Result<()> {
-    let _args = Args::parse();
+    let args = Args::parse();
     dotenv().ok();
 
-    go().await;
+    if args.eval.is_some() {
+        cli_eval(args.eval.unwrap()).await.unwrap();
+    } else {
+        cli_repl().await.unwrap();
+    }
 
-    return Ok(());
+    Ok(())
 }
