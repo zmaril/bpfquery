@@ -16,9 +16,6 @@ use std::any::Any;
 
 use async_trait::async_trait;
 use futures::stream::{self};
-use openssh::{KnownHosts, SessionBuilder};
-use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
 use std::sync::Arc;
 
 use serde_json::Value;
