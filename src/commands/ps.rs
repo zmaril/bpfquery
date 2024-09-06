@@ -1,4 +1,4 @@
-use datafusion::arrow::array::{Int32Builder, StringArray};
+use datafusion::arrow::array::{Int32Builder, StringArray, Float32Array, Int32Array};
 use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::datasource::{TableProvider, TableType};
@@ -26,17 +26,36 @@ use crate::commands::util::get_session;
 
 #[derive(Debug, Clone)]
 pub struct Process {
-    pub user: String,
-    pub pid: i32,
-    pub vsz: i32,
-    pub rss: i32,
-    pub tty: Option<String>,
-    pub stat: Option<String>,
-    pub started: Option<String>,
-    pub time: String,
     pub command: String,
     pub cpu_percent: Option<f32>,
     pub mem_percent: Option<f32>,
+    pub pid: i32,
+    pub rss: i32,
+    pub started: Option<String>,
+    pub stat: Option<String>,
+    pub time: String,
+    pub tty: Option<String>,
+    pub user: String,
+    pub vsz: i32,
+}
+
+impl Process {
+    pub fn schema() -> SchemaRef {
+        let fields = vec![
+            Field::new("command", DataType::Utf8, false),
+            Field::new("cpu_percent", DataType::Float32, true),
+            Field::new("mem_percent", DataType::Float32, true),
+            Field::new("pid", DataType::Int32, false),
+            Field::new("rss", DataType::Int32, false),
+            Field::new("started", DataType::Utf8, true),
+            Field::new("stat", DataType::Utf8, true),
+            Field::new("time", DataType::Utf8, false),
+            Field::new("tty", DataType::Utf8, true),
+            Field::new("user", DataType::Utf8, false),
+            Field::new("vsz", DataType::Int32, false),
+        ];
+        Arc::new(Schema::new(fields))
+    }
 }
 
 pub fn parse(ps_output: String) -> Vec<Process> {
@@ -63,17 +82,17 @@ pub fn parse(ps_output: String) -> Vec<Process> {
         .unwrap()
         .iter()
         .map(|p| Process {
-            pid: p["pid"].as_i64().unwrap() as i32,
             command: p["command"].as_str().unwrap().to_string(),
-            user: p["user"].as_str().unwrap().to_string(),
-            vsz: p["vsz"].as_i64().unwrap() as i32,
-            rss: p["rss"].as_i64().unwrap() as i32,
-            tty: p["tty"].as_str().map(|tty| tty.to_string()),
-            stat: p["stat"].as_str().map(|x| x.to_string()),
-            started: p["started"].as_str().map(|x| x.to_string()),
-            time: p["time"].as_str().unwrap().to_string(),
             cpu_percent: p["cpu_percent"].as_f64().map(|x| x as f32),
             mem_percent: p["mem_percent"].as_f64().map(|x| x as f32),
+            pid: p["pid"].as_i64().unwrap() as i32,
+            rss: p["rss"].as_i64().unwrap() as i32,
+            started: p["started"].as_str().map(|x| x.to_string()),
+            stat: p["stat"].as_str().map(|x| x.to_string()),
+            time: p["time"].as_str().unwrap().to_string(),
+            tty: p["tty"].as_str().map(|tty| tty.to_string()),
+            user: p["user"].as_str().unwrap().to_string(),
+            vsz: p["vsz"].as_i64().unwrap() as i32,
         })
         .collect();
 
@@ -84,11 +103,6 @@ pub fn parse(ps_output: String) -> Vec<Process> {
 async fn get_proc_info() -> Result<SendableRecordBatchStream> {
     let session = get_session().await;
 
-    let fields = vec![
-        Field::new("pid", DataType::Int32, false),
-        Field::new("command", DataType::Utf8, false),
-    ];
-    let schema = Schema::new(fields);
 
     //just run ps aux and get the output
     let ps_aux = session.command("ps").arg("aux").output().await.unwrap();
@@ -105,12 +119,29 @@ async fn get_proc_info() -> Result<SendableRecordBatchStream> {
         pid_array.append_value(process.pid);
 
         let command_array = StringArray::from(vec![process.command]);
-
+        let user_array = StringArray::from(vec![process.user]);
+        let vsz_array = Int32Array::from(vec![process.vsz]);
+        let rss_array = Int32Array::from(vec![process.rss]);
+        let tty_array = StringArray::from(vec![process.tty.unwrap_or("".to_string())]);
+        let stat_array = StringArray::from(vec![process.stat.unwrap_or("".to_string())]);
+        let started_array = StringArray::from(vec![process.started.unwrap_or("".to_string())]);
+        let time_array = StringArray::from(vec![process.time]);
+        let cpu_percent_array = Float32Array::from(vec![process.cpu_percent.unwrap_or(0.0)]);
+        let mem_percent_array = Float32Array::from(vec![process.mem_percent.unwrap_or(0.0)]);
         let batch = RecordBatch::try_new(
-            Arc::new(schema.clone()),
+            Process::schema(),
             vec![
-                Arc::new(pid_array.finish()),
                 Arc::new(command_array),
+                Arc::new(cpu_percent_array),
+                Arc::new(mem_percent_array),
+                Arc::new(pid_array.finish()),
+                Arc::new(rss_array),
+                Arc::new(started_array),
+                Arc::new(stat_array),
+                Arc::new(time_array),
+                Arc::new(tty_array),
+                Arc::new(user_array),
+                Arc::new(vsz_array),
             ],
         )?;
         batches.push(Ok(batch));
@@ -120,7 +151,7 @@ async fn get_proc_info() -> Result<SendableRecordBatchStream> {
     let stream = stream::iter(batches);
 
     Ok(Box::pin(RecordBatchStreamAdapter::new(
-        Arc::new(schema),
+        Process::schema(),
         stream,
     )))
 }
@@ -210,11 +241,7 @@ impl TableProvider for ProcessTable {
         self
     }
     fn schema(&self) -> Arc<Schema> {
-        let schema = Schema::new(vec![
-            Field::new("pid", DataType::Int32, false),
-            Field::new("command", DataType::Utf8, false),
-        ]);
-        Arc::new(schema)
+        Process::schema()
     }
     fn table_type(&self) -> TableType {
         TableType::Base

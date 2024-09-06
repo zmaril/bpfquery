@@ -24,6 +24,7 @@ datafusion = "41.0.0"
 async-trait = "0.1.82"
 futures = "0.3.30"
 flamegraph = "0.6.5"
+arrow_convert = "0.6.8"
 
 [profile.release]
 debug = true

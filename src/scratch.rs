@@ -1,35 +1,12 @@
-use datafusion::physical_plan::PlanProperties;
-use datafusion::prelude::*;
-
-use openssh::{KnownHosts, SessionBuilder};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
+use datafusion::execution::context::SessionContext;
 use std::sync::Arc;
 
 use crate::commands::ps::ProcessTable;
 
-#[derive(Clone, Debug)]
-struct CustomExec {
-    cache: PlanProperties,
-    //projected_schema: SchemaRef,
-    //db: ProcessTable,
-}
-
-async fn get_session() -> openssh::Session {
-    let mut s = SessionBuilder::default();
-    let mut h = std::env::var("BPFTRACE_MACHINE").unwrap();
-    let user = "root".to_string();
-    h = format!("{}@{}", user, h);
-    s.keyfile("bpftrace_machine");
-    s.known_hosts_check(KnownHosts::Accept);
-    s.connect(h).await.unwrap()
-}
-
-pub async fn set_up() -> std::io::Result<SessionContext> {
+async fn set_up() -> std::io::Result<SessionContext> {
     let ctx = SessionContext::new();
-    ctx.register_csv("airtravel", "airtravel.csv", CsvReadOptions::new())
-        .await
-        .unwrap();
     let process_table = Arc::new(ProcessTable {});
     ctx.register_table("process", process_table).unwrap();
     Ok(ctx)
