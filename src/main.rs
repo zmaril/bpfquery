@@ -1,5 +1,5 @@
 mod scratch;
-
+mod commands;
 use dotenv::dotenv;
 use scratch::{cli_eval, cli_repl};
 
