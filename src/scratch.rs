@@ -1,4 +1,4 @@
-use datafusion::arrow::array::{StringArray, UInt64Builder, UInt8Builder};
+use datafusion::arrow::array::{StringArray, Int32Builder, UInt8Builder};
 use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::dataframe::DataFrame;
@@ -20,18 +20,76 @@ use std::any::Any;
 
 use async_trait::async_trait;
 use datafusion::catalog::Session;
-use datafusion::prelude::*;
 use futures::stream::{self, StreamExt};
 use openssh::{KnownHosts, SessionBuilder, Stdio};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
-use std::str::FromStr;
 use std::sync::Arc;
 #[derive(Clone, Debug)]
 struct CustomExec {
     cache: PlanProperties,
     projected_schema: SchemaRef,
     db: ProcessTable,
+}
+
+async fn get_proc_info() -> Result<SendableRecordBatchStream> {
+    let mut s = SessionBuilder::default();
+    let mut h = std::env::var("BPFTRACE_MACHINE").unwrap();
+    let user = "root".to_string();
+    h = format!("{}@{}", user, h);
+    s.keyfile("/app/bpftrace_machine");
+    s.known_hosts_check(KnownHosts::Accept);
+
+    let session = s.connect(h).await.unwrap();
+
+    let mut cmd = session.command("ls");
+    cmd.arg("/proc");
+    let output = cmd.output().await.unwrap();
+    // parse the output into a stream of record batches
+    let sout = String::from_utf8(output.stdout).unwrap();
+    let lines = sout
+        .lines()
+        // filter out the lines that are not valid u64
+        .filter(|s| s.parse::<i32>().is_ok())
+        .map(|s| {
+            let t = s.to_owned();
+            let fields = vec![
+                Field::new("pid", DataType::Int32, false),
+                Field::new("name", DataType::Utf8, false),
+                Field::new("cmdline", DataType::Utf8, false),
+            ];
+            let schema = Schema::new(fields);
+            // convert the u8 array to a string
+            let pid = t.clone().parse::<i32>().unwrap();
+
+            let mut pid_array = Int32Builder::new();
+            pid_array.append_value(pid);
+            let name_array = StringArray::from(vec![t.clone()]);
+            let cmdline_array = StringArray::from(vec![t.clone()]);
+
+            let batch = RecordBatch::try_new(
+                Arc::new(schema.clone()),
+                vec![
+                    Arc::new(pid_array.finish()),
+                    Arc::new(name_array),
+                    Arc::new(cmdline_array),
+                ],
+            )?;
+            Ok::<RecordBatch, datafusion::common::DataFusionError>(batch)
+        });
+    let stream = stream::iter(lines.collect::<Vec<_>>());
+
+    let fields2 = vec![
+        Field::new("pid", DataType::Int32, false),
+        Field::new("name", DataType::Utf8, false),
+        Field::new("cmdline", DataType::Utf8, false),
+    ];
+    let schema2 = Schema::new(fields2);
+
+    Ok(Box::pin(RecordBatchStreamAdapter::new(
+        Arc::new(schema2),
+        stream,
+    )))
 }
 
 impl CustomExec {
@@ -53,61 +111,6 @@ impl CustomExec {
             Partitioning::UnknownPartitioning(1),
             ExecutionMode::Bounded,
         )
-    }
-    async fn get_proc_info(&self) -> Result<SendableRecordBatchStream> {
-        let mut s = SessionBuilder::default();
-        let mut h = std::env::var("BPFTRACE_MACHINE").unwrap();
-        let user = "root".to_string();
-        h = format!("{}@{}", user, h);
-        s.keyfile("/app/bpftrace_machine");
-        s.known_hosts_check(KnownHosts::Accept);
-
-        let session = s.connect(h).await.unwrap();
-
-        let mut cmd = session.command("ls");
-        cmd.arg("/proc");
-        let output = cmd.output().await.unwrap();
-        // parse the output into a stream of record batches
-        let sout = String::from_utf8(output.stdout).unwrap();
-        let lines = sout.lines().map(|s| {
-            let t = s.to_owned();
-            let fields = vec![
-                Field::new("pid", DataType::Int32, false),
-                Field::new("name", DataType::Utf8, false),
-                Field::new("cmdline", DataType::Utf8, false),
-            ];
-            let schema = Schema::new(fields);
-            // convert the u8 array to a string
-            let pid = t.clone().parse::<u64>().unwrap();
-
-            let mut pid_array = UInt64Builder::new();
-            pid_array.append_value(pid);
-            let name_array = StringArray::from(vec![t.clone()]);
-            let cmdline_array = StringArray::from(vec![t.clone()]);
-
-            let batch = RecordBatch::try_new(
-                Arc::new(schema.clone()),
-                vec![
-                    Arc::new(pid_array.finish()),
-                    Arc::new(name_array),
-                    Arc::new(cmdline_array),
-                ],
-            )?;
-            Ok::<RecordBatch, datafusion::common::DataFusionError>(batch)
-        });
-        let stream = stream::iter(lines.collect::<Vec<_>>());
-
-        let fields2 = vec![
-            Field::new("pid", DataType::Int32, false),
-            Field::new("name", DataType::Utf8, false),
-            Field::new("cmdline", DataType::Utf8, false),
-        ];
-        let schema2 = Schema::new(fields2);
-
-        Ok(Box::pin(RecordBatchStreamAdapter::new(
-            Arc::new(schema2),
-            stream,
-        )))
     }
 }
 
@@ -140,13 +143,10 @@ impl ExecutionPlan for CustomExec {
     ) -> Result<SendableRecordBatchStream> {
         // ssh into the machine and process the /proc directory
         // return a stream of record batches
-        let fut = self.get_proc_info();
+        let fut = get_proc_info();
         let stream = futures::stream::once(fut).try_flatten();
         let schema = self.schema().clone();
-        let b = Box::pin(RecordBatchStreamAdapter::new(
-            schema,
-            stream,
-        ));
+        let b = Box::pin(RecordBatchStreamAdapter::new(schema, stream));
         Ok(b)
     }
 
