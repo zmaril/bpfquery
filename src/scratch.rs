@@ -1,30 +1,26 @@
-use datafusion::arrow::array::{StringArray, Int32Builder, UInt8Builder};
+use datafusion::arrow::array::{Int32Builder, StringArray};
 use datafusion::arrow::datatypes::{DataType, Field, Schema, SchemaRef};
 use datafusion::arrow::record_batch::RecordBatch;
-use datafusion::dataframe::DataFrame;
-use datafusion::datasource::provider_as_source;
 use datafusion::datasource::{TableProvider, TableType};
 use datafusion::error::Result;
-use datafusion::execution::context::{SessionState, TaskContext};
+use datafusion::execution::context::TaskContext;
 use datafusion::physical_expr::EquivalenceProperties;
-use datafusion::physical_plan::expressions::PhysicalSortExpr;
-use datafusion::physical_plan::memory::MemoryStream;
 use datafusion::physical_plan::stream::RecordBatchStreamAdapter;
 use datafusion::physical_plan::{
     project_schema, DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, Partitioning,
-    PlanProperties, SendableRecordBatchStream, Statistics,
+    PlanProperties, SendableRecordBatchStream,
 };
 use datafusion::prelude::*;
 use futures::TryStreamExt;
 use std::any::Any;
 
 use async_trait::async_trait;
-use datafusion::catalog::Session;
 use futures::stream::{self, StreamExt};
-use openssh::{KnownHosts, SessionBuilder, Stdio};
+use openssh::{KnownHosts, SessionBuilder};
 use rustyline::error::ReadlineError;
 use rustyline::DefaultEditor;
 use std::sync::Arc;
+
 #[derive(Clone, Debug)]
 struct CustomExec {
     cache: PlanProperties,
@@ -32,62 +28,80 @@ struct CustomExec {
     db: ProcessTable,
 }
 
-async fn get_proc_info() -> Result<SendableRecordBatchStream> {
+async fn get_session() -> openssh::Session {
     let mut s = SessionBuilder::default();
     let mut h = std::env::var("BPFTRACE_MACHINE").unwrap();
     let user = "root".to_string();
     h = format!("{}@{}", user, h);
     s.keyfile("/app/bpftrace_machine");
     s.known_hosts_check(KnownHosts::Accept);
+    s.connect(h).await.unwrap()
+}
 
-    let session = s.connect(h).await.unwrap();
-
+async fn get_procs(session: &openssh::Session) -> Vec<i32> {
     let mut cmd = session.command("ls");
     cmd.arg("/proc");
     let output = cmd.output().await.unwrap();
-    // parse the output into a stream of record batches
-    let sout = String::from_utf8(output.stdout).unwrap();
-    let lines = sout
+    String::from_utf8(output.stdout)
+        .unwrap()
         .lines()
-        // filter out the lines that are not valid u64
         .filter(|s| s.parse::<i32>().is_ok())
-        .map(|s| {
-            let t = s.to_owned();
-            let fields = vec![
-                Field::new("pid", DataType::Int32, false),
-                Field::new("name", DataType::Utf8, false),
-                Field::new("cmdline", DataType::Utf8, false),
-            ];
-            let schema = Schema::new(fields);
-            // convert the u8 array to a string
-            let pid = t.clone().parse::<i32>().unwrap();
+        .map(|s| s.parse::<i32>().unwrap())
+        .collect::<Vec<i32>>()
+}
 
-            let mut pid_array = Int32Builder::new();
-            pid_array.append_value(pid);
-            let name_array = StringArray::from(vec![t.clone()]);
-            let cmdline_array = StringArray::from(vec![t.clone()]);
+async fn read_remote_file(session: &openssh::Session, path: String) -> String {
+    let mut cmd = session.command("cat");
+    cmd.arg(path);
+    let output = cmd.output().await.unwrap();
+    String::from_utf8(output.stdout).unwrap()
+}
 
-            let batch = RecordBatch::try_new(
-                Arc::new(schema.clone()),
-                vec![
-                    Arc::new(pid_array.finish()),
-                    Arc::new(name_array),
-                    Arc::new(cmdline_array),
-                ],
-            )?;
-            Ok::<RecordBatch, datafusion::common::DataFusionError>(batch)
-        });
-    let stream = stream::iter(lines.collect::<Vec<_>>());
+async fn get_proc_info() -> Result<SendableRecordBatchStream> {
+    let session = get_session().await;
+    let pids = get_procs(&session).await;
 
-    let fields2 = vec![
+    let mut batches = Vec::new();
+    for pid in pids {
+        let fields = vec![
+            Field::new("pid", DataType::Int32, false),
+            Field::new("comm", DataType::Utf8, false),
+            Field::new("cmdline", DataType::Utf8, false),
+        ];
+        let schema = Schema::new(fields);
+        
+        let mut pid_array = Int32Builder::new();
+        pid_array.append_value(pid);
+
+        let comm = read_remote_file(&session, format!("/proc/{}/comm", pid)).await;
+        let cmdline = read_remote_file(&session, format!("/proc/{}/cmdline", pid)).await;
+
+        let comm_array = StringArray::from(vec![comm]);
+        let cmdline_array = StringArray::from(vec![cmdline]);
+
+        let batch = RecordBatch::try_new(
+            Arc::new(schema.clone()),
+            vec![
+                Arc::new(pid_array.finish()),
+                Arc::new(comm_array),
+                Arc::new(cmdline_array),
+            ],
+        )?;
+
+        batches.push(Ok(batch));
+    }
+
+    let stream = stream::iter(batches);
+
+    let fields = vec![
         Field::new("pid", DataType::Int32, false),
-        Field::new("name", DataType::Utf8, false),
+        Field::new("comm", DataType::Utf8, false),
         Field::new("cmdline", DataType::Utf8, false),
     ];
-    let schema2 = Schema::new(fields2);
+    let schema = Schema::new(fields);
 
     Ok(Box::pin(RecordBatchStreamAdapter::new(
-        Arc::new(schema2),
+        Arc::new(schema),
         stream,
     )))
 }
@@ -180,7 +194,7 @@ impl TableProvider for ProcessTable {
     }
     async fn scan(
         &self,
-        _state: &dyn Session,
+        _state: &dyn datafusion::catalog::Session,
         projection: Option<&Vec<usize>>,
         _filters: &[Expr],
         _limit: Option<usize>,
